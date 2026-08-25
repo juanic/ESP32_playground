@@ -73,7 +73,7 @@ CMakeLists.txt (raíz del proyecto)
    - `REQUIRES unity drivers_hal board_support`
 
 6. Se incorporó la app al workspace de VS Code:
-   - Archivo: `AyPSE.code-workspace`
+   - Archivo: `ESP32_playground.code-workspace`
    - Se agregó `./apps/0_test_runner` en `folders`.
 
 > No se usan Makefiles manuales. El build se resuelve con CMake de ESP-IDF (`project.cmake`).

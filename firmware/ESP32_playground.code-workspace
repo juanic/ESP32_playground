@@ -1,4 +1,4 @@
-{
+﻿{
     "folders": [
         {
             "path": "./apps/0_blinking"
@@ -10,10 +10,10 @@
             "path": "./apps/0_test_multi"
         },
         {
-            "path": "./apps/x_template"
+            "path": "./apps/1_touch"
         },
         {
-            "path": "./middleware"
+            "path": "./apps/x_template"
         },
         {
             "path": "./board_support"
@@ -22,23 +22,25 @@
             "path": "./drivers_hal"
         },
         {
-            "path": "apps/1_touch"
+            "path": "./middleware"
         }
     ],
     "settings": {
-        "idf.portWin": "COM14",
+        "idf.adapterTargetName": "esp32",
+        "idf.customExtraVars": {
+            "IDF_TARGET": "esp32"
+        },
+        "idf.flashType": "UART",
         "idf.flashBaudRate": "115200",
-        "idf.flashType": "JTAG",
+        "idf.portWin": "COM6",
         "cmake.configureOnOpen": false,
-        "idf.svdFilePath": "${workspaceFolder}/../../esp32c6.svd",
         "idf.openOcdConfigs": [
-            "board/esp32c6-builtin.cfg"
+            "interface/ftdi/esp32_devkitj_v1.cfg",
+            "board/esp32-wrover-kit-3.3v.cfg"
         ]
     },
     "tasks": {
         "version": "2.0.0",
-        "tasks": [
-
-        ]
+        "tasks": []
     }
 }

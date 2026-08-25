@@ -13,7 +13,7 @@
   "clangd.arguments": [
     "--background-index",
     "--query-driver=**",
-    "--compile-commands-dir=d:\\Documentos\\GitHub\\Curso_AyPSE_ESE\\firmware\\apps\\0_test_multi\\build"
+    "--compile-commands-dir=${workspaceFolder}/build"
   ],
   "python-envs.pythonProjects": [
     {

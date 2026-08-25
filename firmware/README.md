@@ -13,7 +13,7 @@ graph TD
     Middleware --> BSP
     BSP --> HAL["Hardware Abstraction Layer (HAL)"]
     HAL --> ESPIDF["Driver Layer (ESP-IDF)"]
-    ESPIDF --> Hardware["Microcontroller (ESP32-C6)"]
+    ESPIDF --> Hardware["Microcontroller (ESP32)"]
     
     style Apps fill:#4F46E5,stroke:#312E81,stroke-width:2px,color:#FFFFFF
     style Middleware fill:#0891B2,stroke:#164E63,stroke-width:2px,color:#FFFFFF
