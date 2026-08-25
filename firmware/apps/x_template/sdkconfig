@@ -1,0 +1,6 @@
+#
+# This file was reset because the ESP-IDF target changed from esp32c6 to esp32.
+# Run `idf.py set-target esp32` (or `idf.py build`) to regenerate the full
+# configuration with defaults for this target.
+#
+CONFIG_IDF_TARGET="esp32"

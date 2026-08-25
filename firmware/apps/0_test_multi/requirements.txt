@@ -1,0 +1,3 @@
+pytest
+pytest-embedded
+pytest-embedded-idf
