@@ -1,0 +1,55 @@
+{
+    "folders": [
+        {
+            "path": "./apps/0_blinking"
+        },
+        {
+            "path": "./apps/0_test_runner"
+        },
+        {
+            "path": "./apps/0_test_multi"
+        },
+        {
+            "path": "./apps/1_touch"
+        },
+        {
+            "path": "./apps/2_ble_hid"
+        },
+        {
+            "path": "./apps/3_usb_hid"
+        },
+        {
+            "path": "./apps/x_template"
+        },
+        {
+            "path": "./board_support"
+        },
+        {
+            "path": "./drivers_hal"
+        },
+        {
+            "path": "./middleware"
+        },
+        {
+            "path": "apps/4_hid_touch"
+        }
+    ],
+    "settings": {
+        "idf.adapterTargetName": "esp32s3",
+        "idf.customExtraVars": {
+            "IDF_TARGET": "esp32s3"
+        },
+        "idf.flashType": "UART",
+        "idf.flashBaudRate": "115200",
+        "idf.portWin": "COM6",
+        "cmake.configureOnOpen": false,
+        "idf.openOcdConfigs": [
+            "interface/ftdi/esp32s3_devkitj_v1.cfg",
+            "board/esp32s3-ftdi.cfg"
+        ]
+    },
+    "tasks": {
+        "version": "2.0.0",
+        "tasks": []
+    }
+}

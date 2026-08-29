@@ -1,0 +1,18 @@
+# Defaults applied by idf.py on reconfigure (all targets; this project is esp32s3-only).
+# These are the source of truth; sdkconfig is regenerated from them.
+#
+# HID transport selection (drivers_hal/Kconfig).
+#   - USB HID (TinyUSB, native USB on the XIAO ESP32-S3): CONFIG_HID_TRANSPORT_USB
+#   - BLE HID (Bluetooth):                              CONFIG_HID_TRANSPORT_BLE
+#   - Both:                                             CONFIG_HID_TRANSPORT_BOTH
+# Default here: USB. The drivers_hal fixups (include/def/link of the local
+# esp_tinyusb + tinyusb components) are transport-conditional, so switching to
+# BLE or BOTH only requires changing this single line (plus the matching BLE
+# sdkconfig options, as used by apps/2_ble_hid).
+CONFIG_HID_TRANSPORT_USB=y
+
+# TinyUSB HID class device (esp_tinyusb v2.x, vendored in components/).
+# esp_tinyusb is pulled in by drivers_hal (PRIV_REQUIRES) for the USB transport.
+CONFIG_TINYUSB_ENABLED=y
+# In esp_tinyusb v2.x the HID class is enabled by the interface count (not *_HID_ENABLED).
+CONFIG_TINYUSB_HID_COUNT=1

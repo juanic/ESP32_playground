@@ -1,0 +1,19 @@
+menu "HID Driver (drivers_hal)"
+
+choice HID_TRANSPORT
+    prompt "Active HID transport"
+    default HID_TRANSPORT_BLE
+    help
+        Select which HID transport(s) the drivers_hal component builds and
+        links. BLE uses esp_hid (HOGP); USB uses TinyUSB. "BLE + USB
+        simultaneously" compiles both so the two transports can coexist.
+
+    config HID_TRANSPORT_BLE
+        bool "BLE (esp_hid / HOGP)"
+    config HID_TRANSPORT_USB
+        bool "USB (TinyUSB HID)"
+    config HID_TRANSPORT_BOTH
+        bool "BLE + USB simultaneously"
+endchoice
+
+endmenu

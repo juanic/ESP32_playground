@@ -1,0 +1,13 @@
+{
+    "idf.adapterTargetName": "esp32s3",
+    "idf.currentSetup": "C:\\esp\\v6.0.1\\esp-idf",
+    "idf.portWin": "COM3",
+    "idf.flashType": "UART",
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32s3"
+    },
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32s3_devkitj_v1.cfg",
+        "board/esp32s3-ftdi.cfg"
+    ]
+}

@@ -1,0 +1,11 @@
+# Defaults applied by idf.py on reconfigure (target: esp32s3).
+# These are the source of truth; sdkconfig is regenerated from them.
+#
+# HID transport selection (drivers_hal/Kconfig)
+CONFIG_HID_TRANSPORT_USB=y
+
+# TinyUSB HID class device (esp_tinyusb v2.x component).
+# esp_tinyusb is pulled in by drivers_hal (PRIV_REQUIRES) for the USB transport.
+CONFIG_TINYUSB_ENABLED=y
+# In esp_tinyusb v2.x the HID class is enabled by the interface count (not *_HID_ENABLED).
+CONFIG_TINYUSB_HID_COUNT=1
