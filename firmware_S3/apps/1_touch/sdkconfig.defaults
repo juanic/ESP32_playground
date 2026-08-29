@@ -1,0 +1,4 @@
+# 1_touch is a touch/LED debug app: it does not use any HID transport, so it
+# must NOT pull in Bluetooth or TinyUSB. Select the "None" transport in
+# drivers_hal so only the GPIO/touch HAL is built.
+CONFIG_HID_TRANSPORT_NONE=y

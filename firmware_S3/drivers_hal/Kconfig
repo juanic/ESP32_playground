@@ -2,12 +2,16 @@ menu "HID Driver (drivers_hal)"
 
 choice HID_TRANSPORT
     prompt "Active HID transport"
-    default HID_TRANSPORT_BLE
+    default HID_TRANSPORT_NONE
     help
         Select which HID transport(s) the drivers_hal component builds and
-        links. BLE uses esp_hid (HOGP); USB uses TinyUSB. "BLE + USB
-        simultaneously" compiles both so the two transports can coexist.
+        links. "None" builds only the GPIO/touch HAL (no Bluetooth, no USB HID);
+        use it for apps that do not need HID. BLE uses esp_hid (HOGP); USB uses
+        TinyUSB. "BLE + USB simultaneously" compiles both so the two transports
+        can coexist.
 
+    config HID_TRANSPORT_NONE
+        bool "None (no HID)"
     config HID_TRANSPORT_BLE
         bool "BLE (esp_hid / HOGP)"
     config HID_TRANSPORT_USB

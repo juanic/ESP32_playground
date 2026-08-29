@@ -35,7 +35,9 @@ firmware_S3/
     `is_connected`) y comparten el tipo `media_key_t` en `hid_common.h`.
 
 El transporte se elige en `drivers_hal/Kconfig` con
-`CONFIG_HID_TRANSPORT_BLE` / `_USB` / `_BOTH` (por defecto BLE).
+`CONFIG_HID_TRANSPORT_NONE` / `_BLE` / `_USB` / `_BOTH` (por defecto **None**,
+de modo que las apps que no usan HID — como `1_touch` — no arrastran Bluetooth
+ni TinyUSB).
 
 ## Requisitos
 
@@ -84,9 +86,11 @@ vol+, vol−, stop). Al arrancar se **calibra la línea base** de cada canal
 la base en **200** puntos (detección por flanco, un solo envío aunque se mantenga
 el dedo).
 
-Mapeo por defecto en `s_map[]` (`apps/4_hid_touch/main/4_hid_touch.c`):
-`TOUCH_PAD_1/4/5/6/7/8` → GPIO 2/5/6/7/8/9 (canales que no comparten pines de
-strapping). Ajusta la tabla a los pines que realmente uses en tu placa.
+Mapeo en `s_map[]` (`apps/4_hid_touch/main/4_hid_touch.c`):
+T4=Next, T5=Vol+, T6=Pause, T7=Play, T8=Vol−, T9=Back
+(`TOUCH_PAD_4..9` → GPIO 5..10). Ajusta la tabla a los pines que realmente
+uses en tu placa. Para observar los valores crudos de esos canales y calibrar
+el umbral, compila la app `1_touch`.
 
 ## Componentes locales (USB)
 

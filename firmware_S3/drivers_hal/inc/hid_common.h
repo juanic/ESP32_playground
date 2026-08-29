@@ -44,7 +44,9 @@ typedef enum {
 	MEDIA_KEY_PREV,			/**< Previous track */
 	MEDIA_KEY_VOL_UP,		/**< Volume up */
 	MEDIA_KEY_VOL_DOWN,		/**< Volume down */
-	MEDIA_KEY_STOP			/**< Stop */
+	MEDIA_KEY_STOP,			/**< Stop */
+	MEDIA_KEY_PLAY,			/**< Play */
+	MEDIA_KEY_PAUSE			/**< Pause */
 } media_key_t;
 
 /*==================[internal functions definition]=========================*/
@@ -64,6 +66,8 @@ static inline uint16_t hid_media_key_to_usage(media_key_t key)
 	case MEDIA_KEY_VOL_UP:     return 0x00E9; /* HID_USAGE_CONSUMER_VOLUME_INCREMENT */
 	case MEDIA_KEY_VOL_DOWN:   return 0x00EA; /* HID_USAGE_CONSUMER_VOLUME_DECREMENT */
 	case MEDIA_KEY_STOP:       return 0x00B7; /* HID_USAGE_CONSUMER_STOP */
+	case MEDIA_KEY_PLAY:       return 0x00B0; /* HID_USAGE_CONSUMER_PLAY */
+	case MEDIA_KEY_PAUSE:      return 0x00B1; /* HID_USAGE_CONSUMER_PAUSE */
 	default:                   return 0x0000;
 	}
 }

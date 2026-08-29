@@ -57,7 +57,7 @@
 #define TOUCH_READ_PERIOD_MS  20      /* polling period while connected      */
 #define TOUCH_HOST_POLL_MS    200     /* polling period while no host        */
 
-/* Touch channel -> media key mapping (ESP32-S3: TOUCH_PAD_NUMn == GPIOn). */
+/* Touch channel -> media key mapping (ESP32-S3: TOUCH_PAD_n == GPIO_(n+1)). */
 typedef struct {
     touch_t      pad;
     media_key_t  key;
@@ -65,12 +65,12 @@ typedef struct {
 } touch_map_t;
 
 static const touch_map_t s_map[] = {
-    { TOUCH_PAD_1, MEDIA_KEY_PLAY_PAUSE, "PLAY/PAUSE" },
-    { TOUCH_PAD_4, MEDIA_KEY_NEXT,      "NEXT" },
-    { TOUCH_PAD_5, MEDIA_KEY_PREV,      "PREV" },
-    { TOUCH_PAD_6, MEDIA_KEY_VOL_UP,    "VOL+" },
-    { TOUCH_PAD_7, MEDIA_KEY_VOL_DOWN,  "VOL-" },
-    { TOUCH_PAD_8, MEDIA_KEY_STOP,      "STOP" },
+    { TOUCH_PAD_4, MEDIA_KEY_NEXT,     "NEXT" },
+    { TOUCH_PAD_5, MEDIA_KEY_VOL_UP,   "VOL+" },
+    { TOUCH_PAD_6, MEDIA_KEY_PAUSE,    "PAUSE" },
+    { TOUCH_PAD_7, MEDIA_KEY_PLAY,     "PLAY" },
+    { TOUCH_PAD_8, MEDIA_KEY_VOL_DOWN, "VOL-" },
+    { TOUCH_PAD_9, MEDIA_KEY_PREV,     "BACK" },
 };
 #define N_MAP (sizeof(s_map) / sizeof(s_map[0]))
 

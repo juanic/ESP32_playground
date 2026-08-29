@@ -8,18 +8,15 @@ set(srcs "src/gpio_hal.c"
 # Always included headers
 set(includes "inc")
 
-# The HID stack components (esp_hid + bt for BLE) are required unconditionally so
-# their Kconfig symbols (CONFIG_BT_ENABLED, ...) are always present in the build.
-# Without this, sdkconfig.defaults lines referencing those symbols are silently
-# ignored by conf and the Bluetooth menus do not appear in menuconfig.
-set(priv_reqs esp_driver_gpio esp_driver_touch_sens esp_hid bt)
+# Base private requirements: GPIO + touch sensor drivers (always used by the HAL).
+set(priv_reqs esp_driver_gpio esp_driver_touch_sens)
 
-# HID transport selection (see drivers_hal/Kconfig): only decides which driver
-# source file is compiled. esp_tinyusb + tinyusb are vendored as LOCAL components
-# under apps/3_usb_hid/components/ (no idf_component.yml), so they are pulled in
-# via PRIV_REQUIRES only for the USB/BOTH transports.
+# HID transport selection (see drivers_hal/Kconfig). Only the selected transport's
+# source file is compiled and only its stack is required, so apps that do not use
+# HID at all (e.g. the touch / LED examples) do not pull in Bluetooth or TinyUSB.
 if(CONFIG_HID_TRANSPORT_BLE OR CONFIG_HID_TRANSPORT_BOTH)
     list(APPEND srcs "src/ble_hid_kb.c")
+    list(APPEND priv_reqs bt esp_hid)
 endif()
 
 if(CONFIG_HID_TRANSPORT_USB OR CONFIG_HID_TRANSPORT_BOTH)
@@ -32,10 +29,9 @@ idf_component_register(SRCS ${srcs}
                        PRIV_REQUIRES ${priv_reqs})
 
 # NOTE: For the USB transport, esp_tinyusb + tinyusb are local components under
-# apps/3_usb_hid/components/. PRIV_REQUIRES is needed for LINKING, but the
-# include-dir + compile-definition propagation to this EXTRA component does not
-# happen automatically in this setup, so we add them explicitly. (Guarded so the
-# BLE app, which has no such components, is unaffected.)
+# apps/<usb-app>/components/. PRIV_REQUIRES links them, but the include-dir +
+# compile-definition + link-edge propagation to this EXTRA component does not
+# happen automatically in this setup, so we add them explicitly (USB/BOTH only).
 if(CONFIG_HID_TRANSPORT_USB OR CONFIG_HID_TRANSPORT_BOTH)
     idf_component_get_property(et_dir esp_tinyusb COMPONENT_DIR)
     idf_component_get_property(tb_dir tinyusb COMPONENT_DIR)
