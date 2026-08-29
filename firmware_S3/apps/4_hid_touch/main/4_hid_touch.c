@@ -127,9 +127,15 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(TouchHalStart() ? ESP_OK : ESP_FAIL);
 
+    /* Let the touch-sensor filter settle before calibrating: the first readings
+     * right after continuous scanning starts can spike to huge values. This hit
+     * channel T4 (the first one sampled) and corrupted its baseline. */
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
     /* Calibration: average the baseline of each channel (value rises when touched). */
     for (int i = 0; i < N_MAP; i++) {
         uint32_t sum = 0, v = 0;
+        (void)TouchHalRead(s_map[i].pad, &v); /* discard one transient sample */
         for (int s = 0; s < TOUCH_CAL_SAMPLES; s++) {
             if (TouchHalRead(s_map[i].pad, &v)) {
                 sum += v;
