@@ -1,4 +1,4 @@
-﻿{
+{
     "folders": [
         {
             "path": "./apps/0_blinking"
@@ -23,6 +23,12 @@
         },
         {
             "path": "./middleware"
+        },
+        {
+            "path": "apps/2_touch_sweep"
+        },
+        {
+            "path": "apps/3_ble_media_key"
         }
     ],
     "settings": {

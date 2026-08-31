@@ -5,6 +5,5 @@
     "--background-index",
     "--query-driver=**",
     "--compile-commands-dir=d:\\Documentos\\Desarrollos\\Embedded\\ESP32\\firmware\\apps\\0_blinking\\build"
-  ],
-  "idf.portWin": "COM11"
+  ]
 }

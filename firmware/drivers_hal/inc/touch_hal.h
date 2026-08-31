@@ -44,6 +44,7 @@
 /*==================[inclusions]=============================================*/
 #include <stdbool.h>
 #include <stdint.h>
+#include "driver/touch_sens.h"
 /*==================[macros]=================================================*/
 
 /*==================[typedef]================================================*/
@@ -119,11 +120,46 @@ bool TouchHalRead(touch_t pad, uint32_t *value);
 bool TouchHalIsTouched(touch_t pad);
 
 /**
+ * @brief Update the touch threshold for a previously configured channel.
+ *
+ * This allows runtime calibration: configure channels with an initial
+ * threshold, start scanning, read baseline values, and then set the
+ * real thresholds.
+ *
+ * @param pad Touch channel whose threshold will be updated.
+ * @param threshold New absolute threshold value.
+ * @return true on success, false if the channel was not configured.
+ */
+bool TouchHalSetThreshold(touch_t pad, uint32_t threshold);
+
+/**
  * @brief Stop scanning, disable and release all the touch sensor resources.
  *
  */
 void TouchHalDeinit(void);
 
+
+bool TouchHalSetSampleConfig(float charge_duration_ms,
+                              touch_volt_lim_l_t volt_lim_l,
+                              touch_volt_lim_h_t volt_lim_h);
+bool TouchHalSetChannelExcitation(touch_t pad,
+                                   touch_charge_speed_t charge_speed,
+                                   touch_init_charge_volt_t init_charge_volt);
+bool TouchHalSweepStep(touch_t pad,
+                        touch_charge_speed_t charge_speed,
+                        touch_init_charge_volt_t init_charge_volt,
+                        float charge_duration_ms,
+                        touch_volt_lim_l_t volt_lim_l,
+                        touch_volt_lim_h_t volt_lim_h,
+                        int timeout_ms,
+                        uint32_t *raw_value);
+bool TouchHalSweepExcite(touch_t pad,
+                          touch_charge_speed_t charge_speed,
+                          touch_init_charge_volt_t init_charge_volt,
+                          touch_volt_lim_l_t volt_lim_l,
+                          touch_volt_lim_h_t volt_lim_h,
+                          int timeout_ms,
+                          uint32_t *raw_value);
 /** @} */
 /** @} */
 

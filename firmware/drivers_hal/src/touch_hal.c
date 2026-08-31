@@ -2,11 +2,22 @@
  * @file touch_hal.c
  * @author Albano Peñalva (albano.penalva@uner.edu.ar)
  * @brief Touch pad driver for ESP32.
- * @version 0.1
- * @date 2026-08-24
+ * @version 0.2
+ * @date 2026-08-27
  *
  * @copyright Copyright (c) 2026
  *
+ * Nota: se agregaron funciones de reconfiguración para permitir un
+ * "barrido discreto" de parámetros de excitación (charge_speed,
+ * init_charge_volt, charge_duration_ms, volt_lim_l/h) con el fin de
+ * obtener una firma capacitiva multi-punto. IMPORTANTE: el hardware/driver
+ * de touch v1 (ESP32) SOLO permite reconfigurar controller/channel
+ * mientras el controlador está en estado INIT (deshabilitado). Por lo
+ * tanto cada paso del barrido implica un ciclo completo
+ * disable -> reconfig -> enable -> oneshot_scan -> read. No es posible
+ * mantener un scan continuo de 5ms mientras se cambian parámetros: eso
+ * fuerza una reestructuración del enfoque de barrido original (ver
+ * TouchHalSweepStep).
  */
 
 /*==================[inclusions]=============================================*/
@@ -24,12 +35,48 @@ static touch_sensor_handle_t s_touch_handle = NULL;
 static touch_channel_handle_t s_touch_chan[TOUCH_PAD_QTY] = {NULL};
 static uint32_t s_touch_thresh[TOUCH_PAD_QTY] = {0};
 static touch_sensor_sample_config_t s_sample_cfg;
+static touch_channel_config_t s_chan_cfg[TOUCH_PAD_QTY];
+static bool s_enabled = false;
 static bool s_scanning = false;
 /*==================[external data definition]===============================*/
 
 /*==================[internal functions definition]==========================*/
 static bool TouchPadIsValid(touch_t pad){
 	return (pad < TOUCH_PAD_QTY);
+}
+
+/* Deshabilita el controlador si está activo (enabled o scanning).
+ * Requisito previo obligatorio para poder reconfigurar. */
+static bool TouchHalEnsureDisabled(void){
+	if(s_touch_handle == NULL){
+		return false;
+	}
+	if(s_scanning){
+		if(touch_sensor_stop_continuous_scanning(s_touch_handle) != ESP_OK){
+			return false;
+		}
+		s_scanning = false;
+	}
+	if(s_enabled){
+		if(touch_sensor_disable(s_touch_handle) != ESP_OK){
+			return false;
+		}
+		s_enabled = false;
+	}
+	return true;
+}
+
+static bool TouchHalEnsureEnabled(void){
+	if(s_touch_handle == NULL){
+		return false;
+	}
+	if(!s_enabled){
+		if(touch_sensor_enable(s_touch_handle) != ESP_OK){
+			return false;
+		}
+		s_enabled = true;
+	}
+	return true;
 }
 
 /*==================[external functions definition]==========================*/
@@ -70,19 +117,18 @@ bool TouchHalChannelConfig(touch_t pad, uint32_t threshold){
 	if(touch_sensor_new_channel(s_touch_handle, pad, &chan_cfg, &s_touch_chan[pad]) != ESP_OK){
 		return false;
 	}
+	s_chan_cfg[pad] = chan_cfg;
 	s_touch_thresh[pad] = threshold;
 	return true;
 }
 
 bool TouchHalStart(void){
-	if(s_touch_handle == NULL){
-		return false;
-	}
-	if(touch_sensor_enable(s_touch_handle) != ESP_OK){
+	if(!TouchHalEnsureEnabled()){
 		return false;
 	}
 	if(touch_sensor_start_continuous_scanning(s_touch_handle) != ESP_OK){
 		touch_sensor_disable(s_touch_handle);
+		s_enabled = false;
 		return false;
 	}
 	s_scanning = true;
@@ -109,14 +155,130 @@ bool TouchHalIsTouched(touch_t pad){
 	return (value < s_touch_thresh[pad]);
 }
 
+bool TouchHalSetThreshold(touch_t pad, uint32_t threshold){
+	if(!TouchPadIsValid(pad) || (s_touch_chan[pad] == NULL)){
+		return false;
+	}
+	s_touch_thresh[pad] = threshold;
+	return true;
+}
+
+/*==================[sweep / firma capacitiva]================================*/
+
+bool TouchHalSetSampleConfig(float charge_duration_ms,
+                              touch_volt_lim_l_t volt_lim_l,
+                              touch_volt_lim_h_t volt_lim_h){
+	if(!TouchHalEnsureDisabled()){
+		return false;
+	}
+	s_sample_cfg.charge_duration_ms = charge_duration_ms;
+	s_sample_cfg.charge_volt_lim_l = volt_lim_l;
+	s_sample_cfg.charge_volt_lim_h = volt_lim_h;
+
+	touch_sensor_config_t sens_cfg = TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, &s_sample_cfg);
+	return (touch_sensor_reconfig_controller(s_touch_handle, &sens_cfg) == ESP_OK);
+}
+
+bool TouchHalSetChannelExcitation(touch_t pad,
+                                   touch_charge_speed_t charge_speed,
+                                   touch_init_charge_volt_t init_charge_volt){
+	if(!TouchPadIsValid(pad) || (s_touch_chan[pad] == NULL)){
+		return false;
+	}
+	if(!TouchHalEnsureDisabled()){
+		return false;
+	}
+	s_chan_cfg[pad].charge_speed = charge_speed;
+	s_chan_cfg[pad].init_charge_volt = init_charge_volt;
+	return (touch_sensor_reconfig_channel(s_touch_chan[pad], &s_chan_cfg[pad]) == ESP_OK);
+}
+
+bool TouchHalSweepStep(touch_t pad,
+                        touch_charge_speed_t charge_speed,
+                        touch_init_charge_volt_t init_charge_volt,
+                        float charge_duration_ms,
+                        touch_volt_lim_l_t volt_lim_l,
+                        touch_volt_lim_h_t volt_lim_h,
+                        int timeout_ms,
+                        uint32_t *raw_value){
+	if(!TouchPadIsValid(pad) || (s_touch_chan[pad] == NULL) || (raw_value == NULL)){
+		return false;
+	}
+
+	/* Ambas reconfiguraciones requieren estado INIT (disabled) */
+	if(!TouchHalSetSampleConfig(charge_duration_ms, volt_lim_l, volt_lim_h)){
+		return false;
+	}
+	if(!TouchHalSetChannelExcitation(pad, charge_speed, init_charge_volt)){
+		return false;
+	}
+
+	if(!TouchHalEnsureEnabled()){
+		return false;
+	}
+	if(touch_sensor_trigger_oneshot_scanning(s_touch_handle, timeout_ms) != ESP_OK){
+		return false;
+	}
+	if(touch_channel_read_data(s_touch_chan[pad], TOUCH_CHAN_DATA_TYPE_RAW, raw_value) != ESP_OK){
+		return false;
+	}
+	return true;
+}
+
+bool TouchHalSweepExcite(touch_t pad,
+                          touch_charge_speed_t charge_speed,
+                          touch_init_charge_volt_t init_charge_volt,
+                          touch_volt_lim_l_t volt_lim_l,
+                          touch_volt_lim_h_t volt_lim_h,
+                          int timeout_ms,
+                          uint32_t *raw_value){
+	if(!TouchPadIsValid(pad) || (s_touch_chan[pad] == NULL) || (raw_value == NULL)){
+		return false;
+	}
+
+	/* Un solo ciclo disable: reconfig controller + reconfig channel + enable + oneshot */
+	if(!TouchHalEnsureDisabled()){
+		return false;
+	}
+
+	/* Reconfig controller: solo volt_lim (charge_duration queda fijo en s_sample_cfg) */
+	s_sample_cfg.charge_volt_lim_l = volt_lim_l;
+	s_sample_cfg.charge_volt_lim_h = volt_lim_h;
+	touch_sensor_config_t sens_cfg = TOUCH_SENSOR_DEFAULT_BASIC_CONFIG(1, &s_sample_cfg);
+	if(touch_sensor_reconfig_controller(s_touch_handle, &sens_cfg) != ESP_OK){
+		return false;
+	}
+
+	/* Reconfig channel: excitacion (charge_speed, init_charge_volt) */
+	s_chan_cfg[pad].charge_speed = charge_speed;
+	s_chan_cfg[pad].init_charge_volt = init_charge_volt;
+	if(touch_sensor_reconfig_channel(s_touch_chan[pad], &s_chan_cfg[pad]) != ESP_OK){
+		return false;
+	}
+
+	if(!TouchHalEnsureEnabled()){
+		return false;
+	}
+	if(touch_sensor_trigger_oneshot_scanning(s_touch_handle, timeout_ms) != ESP_OK){
+		return false;
+	}
+	if(touch_channel_read_data(s_touch_chan[pad], TOUCH_CHAN_DATA_TYPE_RAW, raw_value) != ESP_OK){
+		return false;
+	}
+	return true;
+}
+
 void TouchHalDeinit(void){
 	if(s_touch_handle == NULL){
 		return;
 	}
 	if(s_scanning){
 		touch_sensor_stop_continuous_scanning(s_touch_handle);
-		touch_sensor_disable(s_touch_handle);
 		s_scanning = false;
+	}
+	if(s_enabled){
+		touch_sensor_disable(s_touch_handle);
+		s_enabled = false;
 	}
 	for(int pad = 0; pad < TOUCH_PAD_QTY; pad++){
 		if(s_touch_chan[pad] != NULL){

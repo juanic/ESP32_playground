@@ -53,7 +53,7 @@
 #define TOUCH_PAD_COUNT    6
 #define CALIB_SAMPLES      10            /* Number of baseline readings */
 #define CALIB_MARGIN       500           /* Threshold = baseline - margin */
-#define LOOP_PERIOD_MS     10
+#define LOOP_PERIOD_MS     100
 /*==================[internal data definition]===============================*/
 static const touch_t touch_pads[TOUCH_PAD_COUNT] = {
     TOUCH_BTN_1, TOUCH_BTN_2, TOUCH_BTN_3,

@@ -42,7 +42,6 @@
 #include "led.h"
 #include "pwm_hal.h"
 /*==================[macros and definitions]=================================*/
-#define PLOT
 #define TOUCH_BTN_1        TOUCH_PAD_8   /* GPIO_33 */
 #define TOUCH_BTN_2        TOUCH_PAD_9   /* GPIO_32 */
 #define TOUCH_BTN_3        TOUCH_PAD_5   /* GPIO_12 */
@@ -52,8 +51,8 @@
 
 #define TOUCH_PAD_COUNT    6
 #define CALIB_SAMPLES      10            /* Number of baseline readings */
-#define CALIB_MARGIN       500           /* Threshold = baseline - margin */
-#define LOOP_PERIOD_MS     10
+#define CALIB_MARGIN       250           /* Threshold = baseline - margin */
+#define LOOP_PERIOD_MS     100
 /*==================[internal data definition]===============================*/
 static const touch_t touch_pads[TOUCH_PAD_COUNT] = {
     TOUCH_BTN_1, TOUCH_BTN_2, TOUCH_BTN_3,
@@ -204,17 +203,6 @@ void app_main(void){
             }
         }
 
-        /* Print status */
-#ifdef PLOT
-        uint32_t value_1 = 0, value_2 = 0, value_3 = 0;
-        uint32_t value_4 = 0, value_5 = 0, value_6 = 0;
-        if(TouchHalRead(TOUCH_BTN_1, &value_1) && TouchHalRead(TOUCH_BTN_2, &value_2) &&
-           TouchHalRead(TOUCH_BTN_3, &value_3) && TouchHalRead(TOUCH_BTN_4, &value_4) &&
-           TouchHalRead(TOUCH_BTN_5, &value_5) && TouchHalRead(TOUCH_BTN_6, &value_6)){
-            printf("%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%" PRIu32 "\n",
-                   value_1, value_2, value_3, value_4, value_5, value_6);
-        }
-#else
         /* Print status every 500 ms (5 cycles of 100 ms) */
         print_counter++;
         if (print_counter >= 5) {
@@ -240,7 +228,6 @@ void app_main(void){
                 }
             }
         }
-#endif
 
         vTaskDelay(pdMS_TO_TICKS(LOOP_PERIOD_MS));
     }

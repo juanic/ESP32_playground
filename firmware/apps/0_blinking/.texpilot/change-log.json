@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "updatedAt": "2026-08-26T14:22:00.515Z",
+  "entries": [
+    {
+      "id": "change-1787754120513-c12aa311",
+      "savedAt": "2026-08-26T14:22:00.515Z",
+      "actor": "user",
+      "source": "editor",
+      "model": "",
+      "scope": "",
+      "prompt": "",
+      "contributors": [
+        "user"
+      ],
+      "documentPath": ".vscode/settings.json",
+      "documentLabel": ".vscode/settings.json",
+      "stats": {
+        "addedLines": 3,
+        "removedLines": 3,
+        "changedLines": 3,
+        "addedChars": 31,
+        "removedChars": 6
+      },
+      "beforeSnapshot": "history/change-1787754120513-c12aa311-before.json",
+      "afterSnapshot": "history/change-1787754120513-c12aa311-after.json"
+    }
+  ]
+}
