@@ -45,7 +45,7 @@
 
 /*==================[macros and definitions]=================================*/
 #define TOUCH_CAL_SAMPLES     32      /* samples averaged for the baseline */
-#define TOUCH_DELTA_TRIGGER   200     /* deviation above baseline => touched */
+#define TOUCH_DELTA_TRIGGER   300     /* deviation above baseline => touched */
 #define LOOP_PERIOD_MS        100
 
 /* Channels observed in this debug app (same ones used by 4_hid_touch). */

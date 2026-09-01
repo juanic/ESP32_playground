@@ -11,14 +11,24 @@ set(includes "inc")
 # Base private requirements: GPIO + touch sensor drivers (always used by the HAL).
 set(priv_reqs esp_driver_gpio esp_driver_touch_sens)
 
+# NOTE: The BT stack REQUIREMENTS must be unconditional. IDF resolves a component's
+# REQUIRES/PRIV_REQUIRES in an early "scripted" pass that runs BEFORE sdkconfig values
+# (CONFIG_*) are available, so an `if(CONFIG_...)` guard around REQUIRES evaluates false
+# at that stage and the stack never joins the build graph (e.g. esp_bt.h ends up missing).
+# CONFIG gating is therefore applied only to WHICH source file is compiled below; the bt
+# requirement (and thus the include/link path) is always present. bt/esp_hid are standard
+# IDF components, so this does not affect apps that do not use HID.
+set(priv_reqs ${priv_reqs} bt esp_hid)
+
 # HID transport selection (see drivers_hal/Kconfig). Only the selected transport's
-# source file is compiled and only its stack is required, so apps that do not use
-# HID at all (e.g. the touch / LED examples) do not pull in Bluetooth or TinyUSB.
+# source file is compiled.
 if(CONFIG_HID_TRANSPORT_BLE OR CONFIG_HID_TRANSPORT_BOTH)
     list(APPEND srcs "src/ble_hid_kb.c")
-    list(APPEND priv_reqs bt esp_hid)
 endif()
 
+# USB transport. esp_tinyusb + tinyusb are LOCAL components under apps/<usb-app>/components/
+# (not IDF components), so they cannot be placed in the unconditional priv_reqs set or
+# non-USB apps would fail to resolve them. They remain config-gated.
 if(CONFIG_HID_TRANSPORT_USB OR CONFIG_HID_TRANSPORT_BOTH)
     list(APPEND srcs "src/usb_hid_kb.c")
     list(APPEND priv_reqs esp_tinyusb tinyusb)

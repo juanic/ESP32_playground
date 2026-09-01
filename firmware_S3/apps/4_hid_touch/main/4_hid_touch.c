@@ -53,7 +53,7 @@
 
 /*==================[macros and definitions]=================================*/
 #define TOUCH_CAL_SAMPLES     32      /* samples averaged for the baseline */
-#define TOUCH_DELTA_TRIGGER   200     /* counts above baseline => touched   */
+#define TOUCH_DELTA_TRIGGER   250     /* counts above baseline => touched   */
 #define TOUCH_READ_PERIOD_MS  20      /* polling period while connected      */
 #define TOUCH_HOST_POLL_MS    200     /* polling period while no host        */
 
