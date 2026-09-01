@@ -24,6 +24,7 @@
 #include "touch_hal.h"
 #include <string.h>
 #include "driver/touch_sens.h"
+#include "hal/touch_sensor_ll.h"
 /*==================[macros and definitions]=================================*/
 #define TOUCH_PAD_QTY 	10
 /*==================[internal data declaration]==============================*/
@@ -76,6 +77,40 @@ static bool TouchHalEnsureEnabled(void){
 		}
 		s_enabled = true;
 	}
+	return true;
+}
+
+/* Lee el dato RAW directamente del hardware tras un oneshot scan.
+ *
+ * Workaround para el driver touch v1 de ESP-IDF 6.0.2: la API pública
+ * `touch_channel_read_data(.., TOUCH_CHAN_DATA_TYPE_RAW, ..)` siempre falla con
+ * "The software filter has not configured", porque su guard interno exige
+ * `type == TOUCH_CHAN_DATA_TYPE_SMOOTH && data_filter_fn != NULL` (regresión
+ * que bloquea la lectura de dato crudo). Para un barrido de excitación
+ * necesitamos el RAW real por paso, así que replicamos lo que hace el propio
+ * filtro del driver: esperar el fin de medición y leer el registro crudo. */
+static bool TouchHalReadRaw(touch_t pad, uint32_t *raw){
+	if(!TouchPadIsValid(pad) || (raw == NULL)){
+		return false;
+	}
+	/* El flag touch_meas_done queda latcheado a 1 entre scans; si lo leemos
+	 * directamente con `while(!is_measure_done())` la espera puede salir al
+	 * instante y devolver un valor STALE del ciclo anterior. Eso provoca el
+	 * intercalado A/B de las mediciones del barrido.
+	 * Solucion: forzar un nuevo oneshot y DRENAR el flag esperando a que
+	 * baje (medicion en curso) y luego a que suba (medicion completa), de modo
+	 * que el registro touch_meas[] siempre contenga el dato fresco real. */
+	touch_ll_enable_fsm_timer(false);
+	touch_ll_trigger_oneshot_measurement();
+	int guard = 100000;
+	while(touch_ll_is_measure_done() && guard-- > 0){
+		/* espera a que arranque la medicion (flag baja) */
+	}
+	guard = 100000;
+	while(!touch_ll_is_measure_done() && guard-- > 0){
+		/* espera a que termine la medicion fresca (flag sube) */
+	}
+	touch_ll_read_chan_data(pad, TOUCH_LL_READ_RAW, raw);
 	return true;
 }
 
@@ -219,7 +254,7 @@ bool TouchHalSweepStep(touch_t pad,
 	if(touch_sensor_trigger_oneshot_scanning(s_touch_handle, timeout_ms) != ESP_OK){
 		return false;
 	}
-	if(touch_channel_read_data(s_touch_chan[pad], TOUCH_CHAN_DATA_TYPE_RAW, raw_value) != ESP_OK){
+	if(!TouchHalReadRaw(pad, raw_value)){
 		return false;
 	}
 	return true;
@@ -262,10 +297,7 @@ bool TouchHalSweepExcite(touch_t pad,
 	if(touch_sensor_trigger_oneshot_scanning(s_touch_handle, timeout_ms) != ESP_OK){
 		return false;
 	}
-	if(touch_channel_read_data(s_touch_chan[pad], TOUCH_CHAN_DATA_TYPE_RAW, raw_value) != ESP_OK){
-		return false;
-	}
-	return true;
+	return TouchHalReadRaw(pad, raw_value);
 }
 
 void TouchHalDeinit(void){

@@ -8,10 +8,11 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "touch_hal.h"
+#include "Classifier.h"
 
 #define TEST_PAD            TOUCH_PAD_8
 #define ARBITRARY_THRESHOLD 1000
-#define SWEEP_DELAY_MS      500
+#define SWEEP_DELAY_MS      10
 #define PLOT_HEIGHT         18
 #define STEP_COUNT          8
 #define CALIB_SWEEPS        3
@@ -21,7 +22,8 @@ static const char *TAG = "2_touch_sweep";
 
 typedef enum {
     MODE_PLOT,
-    MODE_STAT
+    MODE_STAT,
+    MODE_INFER
 } run_mode_t;
 
 typedef struct {
@@ -36,7 +38,7 @@ static uint32_t fixed_max_val = 0;
 static uint32_t fixed_min_val = 0;
 static uint32_t graph_max = 0;
 static uint32_t graph_min = 0;
-static run_mode_t current_mode = MODE_STAT;
+static run_mode_t current_mode = MODE_INFER;
 
 static void init_sweep_table(void) {
     /*
@@ -50,14 +52,14 @@ static void init_sweep_table(void) {
      */
     static const sweep_step_t table[STEP_COUNT] = {
         /* speed  init_volt             lim_l           lim_h */
-        {  1,     TOUCH_INIT_CHARGE_VOLT_LOW,   TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 0: mín sensibilidad, voltaje inicial LOW  */
-        {  1,     TOUCH_INIT_CHARGE_VOLT_FLOAT, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 1: mín sensibilidad, FLOAT (pin en hi-Z)  */
-        {  1,     TOUCH_INIT_CHARGE_VOLT_HIGH,  TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 2: mín sensibilidad, HIGH                 */
-        {  7,     TOUCH_INIT_CHARGE_VOLT_LOW,   TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 3: máx sensibilidad, LOW                  */
-        {  7,     TOUCH_INIT_CHARGE_VOLT_FLOAT, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 4: máx sensibilidad, FLOAT                */
-        {  7,     TOUCH_INIT_CHARGE_VOLT_HIGH,  TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 5: máx sensibilidad, HIGH                 */
-        {  4,     TOUCH_INIT_CHARGE_VOLT_FLOAT, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 6: punto medio, referencia intermedia     */
-        {  7,     TOUCH_INIT_CHARGE_VOLT_DEFAULT,TOUCH_VOLT_LIM_L_0V5,TOUCH_VOLT_LIM_H_2V5 },  /* 7: default HAL (speed=7, FLOAT), baseline */
+        {  1,     TOUCH_INIT_CHARGE_VOLT_HIGH,   TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 0: mín sensibilidad, voltaje inicial LOW  */
+        {  1,     TOUCH_INIT_CHARGE_VOLT_LOW, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 1: mín sensibilidad, FLOAT (pin en hi-Z)  */
+        {  2,     TOUCH_INIT_CHARGE_VOLT_LOW,  TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 2: mín sensibilidad, HIGH                 */
+        {  3,     TOUCH_INIT_CHARGE_VOLT_LOW,   TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 3: máx sensibilidad, LOW                  */
+        {  4,     TOUCH_INIT_CHARGE_VOLT_LOW, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 4: máx sensibilidad, FLOAT                */
+        {  5,     TOUCH_INIT_CHARGE_VOLT_LOW,  TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 5: máx sensibilidad, HIGH                 */
+        {  6,     TOUCH_INIT_CHARGE_VOLT_LOW, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5 },  /* 6: punto medio, referencia intermedia     */
+        {  7,     TOUCH_INIT_CHARGE_VOLT_LOW,TOUCH_VOLT_LIM_L_0V5,TOUCH_VOLT_LIM_H_2V5 },  /* 7: default HAL (speed=7, FLOAT), baseline */
     };
     memcpy(sweep_steps, table, sizeof(table));
 }
@@ -103,9 +105,20 @@ static void compute_and_print_stats(const uint32_t *raw_values) {
     double stddev = sqrt(variance);
     double cv = (mean != 0.0) ? (stddev / mean * 100.0) : 0.0;
 
-    printf("\n--- SWEEP STATS (%d steps) ---\n", STEP_COUNT);
+    /*printf("\n--- SWEEP STATS (%d steps) ---\n", STEP_COUNT);
     printf("Mean: %.1f | StdDev: %.1f | Min: %lu | Max: %lu | CV: %.2f%%\n",
-           mean, stddev, (unsigned long)min_val, (unsigned long)max_val, cv);
+           mean, stddev, (unsigned long)min_val, (unsigned long)max_val, cv);*/
+}
+
+/* Ejecuta el clasificador sobre el vector de 8 features (una por paso de barrido)
+ * y devuelve la etiqueta (nombre de clase) inferida. */
+static const char *infer_class(const uint32_t *raw_values) {
+    float features[STEP_COUNT];
+    for (int i = 0; i < STEP_COUNT; i++) {
+        features[i] = (float)raw_values[i];
+    }
+    int cls = predict(features);
+    return idxToLabel((uint8_t)cls);
 }
 
 static void command_reader_task(void *arg) {
@@ -119,8 +132,11 @@ static void command_reader_task(void *arg) {
             } else if (strcmp(buf, "#STAT") == 0) {
                 current_mode = MODE_STAT;
                 ESP_LOGI(TAG, "Mode switched to STAT");
+            } else if (strcmp(buf, "#INFER") == 0) {
+                current_mode = MODE_INFER;
+                ESP_LOGI(TAG, "Mode switched to INFER");
             } else if (strlen(buf) > 0) {
-                ESP_LOGW(TAG, "Unknown command: '%s' (use #PLOT or #STAT)", buf);
+                ESP_LOGW(TAG, "Unknown command: '%s' (use #PLOT, #STAT or #INFER)", buf);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(100));
@@ -136,7 +152,7 @@ void app_main(void) {
     }
 
     /* Configurar controller UNA sola vez: ventana fija 5ms, swing máximo 0.5V–2.5V */
-    if (!TouchHalSetSampleConfig(5.0f, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5)) {
+    if (!TouchHalSetSampleConfig(50.0f, TOUCH_VOLT_LIM_L_0V5, TOUCH_VOLT_LIM_H_2V5)) {
         ESP_LOGE(TAG, "TouchHalSetSampleConfig failed!");
         return;
     }
@@ -150,7 +166,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Sweep: 8 configs (speed 1/4/7 × init_volt LOW/FLOAT/HIGH + default), fixed 5ms, 0.5V–2.5V.");
 
     xTaskCreate(command_reader_task, "cmd_reader", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "Commands: #PLOT (graph) | #STAT (statistics)");
+    ESP_LOGI(TAG, "Commands: #PLOT (graph) | #STAT (statistics) | #INFER (classifier)");
 
     uint32_t raw_values[STEP_COUNT];
 
@@ -214,11 +230,11 @@ void app_main(void) {
                 if (raw_values[i] < cur_min) cur_min = raw_values[i];
                 if (raw_values[i] > cur_max) cur_max = raw_values[i];
             }
-            printf("Current Min: %lu | Max: %lu (Baseline Min: %lu, Max: %lu)\n",
+            /*printf("Current Min: %lu | Max: %lu (Baseline Min: %lu, Max: %lu)\n",
                    (unsigned long)cur_min, (unsigned long)cur_max,
-                   (unsigned long)fixed_min_val, (unsigned long)fixed_max_val);
+                   (unsigned long)fixed_min_val, (unsigned long)fixed_max_val);*/
 
-            printf("raw:");
+            //printf("raw:");
             for (int i = 0; i < STEP_COUNT; i++) {
                 printf("%lu%s", (unsigned long)raw_values[i], (i == STEP_COUNT - 1) ? "" : ",");
             }
@@ -227,7 +243,15 @@ void app_main(void) {
         } else if (current_mode == MODE_STAT) {
             compute_and_print_stats(raw_values);
 
-            printf("raw:");
+            //printf("raw:");
+            for (int i = 0; i < STEP_COUNT; i++) {
+                printf("%lu%s", (unsigned long)raw_values[i], (i == STEP_COUNT - 1) ? "" : ",");
+            }
+            printf("\n");
+
+        } else if (current_mode == MODE_INFER) {
+            const char *label = infer_class(raw_values);
+            printf("infer: %s\n", label);
             for (int i = 0; i < STEP_COUNT; i++) {
                 printf("%lu%s", (unsigned long)raw_values[i], (i == STEP_COUNT - 1) ? "" : ",");
             }
