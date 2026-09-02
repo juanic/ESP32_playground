@@ -19,6 +19,7 @@
 #include "bt_classic_hal.h"
 #include "relay_control.h"
 #include "i2s_hal.h"
+#include "inter_board_link.h"
 
 /*==================[macros and definitions]=================================*/
 
@@ -62,6 +63,10 @@ void app_main(void) {
 
     /* Initialize control-plane (BLE control + AVRCP metadata + password).
      * Must run after A2DP init because AVRCP CT depends on A2DP. */
+    if (!InterBoardLinkInit(BSP_SINK_UART_TX_PIN, BSP_SINK_UART_RX_PIN, NULL, NULL)) {
+        ESP_LOGE(TAG, "Inter-board UART init failed!");
+        return;
+    }
     RelayControlInit();
 
     ESP_LOGI(TAG, "Sink ready. Waiting for A2DP connection...");

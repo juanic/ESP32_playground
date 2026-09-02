@@ -10,6 +10,7 @@
 #include "bt_classic_hal.h"
 #include "nvs_hal.h"
 #include "time_hal.h"
+#include "inter_board_link.h"
 #include "esp_log.h"
 #include <string.h>
 #include <stdlib.h>
@@ -44,6 +45,8 @@ static void on_ble_cmd(const char *line, uint16_t len, void *ctx);
 static void on_conn_state(bool connected, const uint8_t *peer_bda);
 static void on_avrcp_meta(const avrcp_meta_t *meta, void *ctx);
 static void handle_command(const char *cmd);
+static void on_inter_board_response(const char *line, void *ctx);
+static void on_inter_board_event(const char *line, void *ctx);
 
 /* ======================== Response helpers ======================== */
 
@@ -365,6 +368,23 @@ static void cmd_grant(const char *arg) {
     evt("EVT GRANT mac=%s minutes=%ld", macstr, minutes);
 }
 
+static void cmd_source_request(const char *command, const char *arg, bool authenticated) {
+    if (authenticated && !is_auth()) {
+        rsp("ERR AUTH_REQUIRED");
+        return;
+    }
+    char line[96];
+    if (arg) snprintf(line, sizeof(line), "%s %s", command, arg);
+    else snprintf(line, sizeof(line), "%s", command);
+    if (!InterBoardLinkRequest(line, on_inter_board_response, NULL)) {
+        rsp("ERR TARGET_TIMEOUT");
+    }
+}
+
+static void cmd_scan_target(const char *arg) { (void)arg; cmd_source_request("SCAN_TARGET", NULL, true); }
+static void cmd_set_target(const char *arg) { cmd_source_request("SET_TARGET", arg, true); }
+static void cmd_get_target(const char *arg) { (void)arg; cmd_source_request("GET_TARGET", NULL, false); }
+
 /* ======================== Command dispatch ======================== */
 
 typedef struct {
@@ -386,6 +406,9 @@ static const cmd_entry_t s_commands[] = {
     { "GET_META",   cmd_get_meta,        false },
     { "SYNC_TIME",  cmd_sync_time,       true  },
     { "GRANT",      cmd_grant,           true  },
+    { "SCAN_TARGET", cmd_scan_target,     false },
+    { "SET_TARGET",  cmd_set_target,      true  },
+    { "GET_TARGET",  cmd_get_target,      false },
 };
 
 static void handle_command(const char *cmd) {
@@ -445,6 +468,16 @@ static void on_avrcp_meta(const avrcp_meta_t *meta, void *ctx) {
         meta->track_changed ? 1 : 0);
 }
 
+static void on_inter_board_response(const char *line, void *ctx) {
+    (void)ctx;
+    rsp("%s", line);
+}
+
+static void on_inter_board_event(const char *line, void *ctx) {
+    (void)ctx;
+    evt("EVT %s", line);
+}
+
 /* ======================== Public API ======================== */
 
 bool RelayControlInit(void) {
@@ -481,6 +514,10 @@ bool RelayControlInit(void) {
 
     /* A2DP connection events */
     bt_classic_hal_register_conn_cb(on_conn_state);
+
+    /* The UART reply is asynchronous, so BLE command processing never waits
+     * for the second ESP32. */
+    InterBoardLinkSetEventCallback(on_inter_board_event, NULL);
 
     s_inited = true;
     ESP_LOGI(TAG, "Relay control initialized (tx=%d)", s_tx_enabled ? 1 : 0);

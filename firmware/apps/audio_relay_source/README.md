@@ -26,6 +26,19 @@ importante no usar dos maestros I2S sobre las mismas lineas de reloj.
 
 El formato actual es PCM estereo, 16 bits y 44.1 kHz.
 
+### Control inter-placa (UART)
+
+| Señal | GPIO source | GPIO sink |
+|-------|:-----------:|:---------:|
+| TX    | 33          | RX 33     |
+| RX    | 32          | TX 32     |
+| GND   | común       | común     |
+
+El enlace opera a 115200, 8N1 y transporta comandos ASCII terminados en
+`\n`. El source recibe `SCAN_TARGET`, `SET_TARGET <nombre_o_MAC>` y
+`GET_TARGET`; responde por el mismo UART y genera eventos `SPEAKER_*` que el
+sink reenvía a la app mediante BLE.
+
 ## Flujo de audio
 
 ESP-IDF 6.x entrega audio a A2DP Source mediante un callback *pull-based*:
@@ -68,10 +81,11 @@ Si necesitas modificar algo, usa `idf.py menuconfig` y revisa:
 
 1. Flashear el firmware en un ESP32
 2. Encender el monitor serie (`idf.py monitor`)
-3. El dispositivo inicia busqueda automatica del amplificador destino
-4. Por defecto busca un dispositivo llamado **"BT-WUZHI"** (configurable en `main.c` via `TARGET_BT_NAME`)
-5. Al encontrarlo, se empareja y conecta automaticamente
-6. El audio que llega por I2S se transmite por A2DP al amplificador
+3. Si existe un target persistido en NVS, el dispositivo inicia la conexión automáticamente
+4. Si no existe, espera `SET_TARGET` desde el sink; no intenta conectarse a ningún parlante
+5. `SET_TARGET` acepta nombre o MAC, lo guarda en NVS y actualiza el destino
+6. `SCAN_TARGET` realiza una búsqueda Bluetooth bajo demanda y reporta cada resultado al sink
+7. El audio que llega por I2S se transmite por A2DP al amplificador conectado
 
 ## Conexion y reconexion
 
@@ -86,13 +100,15 @@ apps/audio_relay_source/main.c          (orquestacion)
 board_support/audio_relay_source_bsp.c  (config de placa)
 drivers_hal/i2s_hal.c                   (wrapper I2S)
 drivers_hal/bt_classic_hal.c            (wrapper A2DP)
+middleware/inter_board_link.c           (protocolo UART de control)
+drivers_hal/uart_link_hal.c             (transporte UART ASCII)
 ```
 
 ## Notas
 
 - El A2DP Sink y Source no pueden correr simultaneamente en el mismo ESP32 (limitacion de Bluedroid)
 - El sample rate por defecto es 44.1 kHz stereo 16-bit
-- El nombre del dispositivo destino se cambia modificando `TARGET_BT_NAME` en `main/main.c`
-- Si no se encuentra el dispositivo destino, la busqueda se repite periodicamente
+- El target se configura desde la app BLE con `SET_TARGET` y se persiste en NVS
+- Si se pierde la conexión, se reintenta cada tres segundos contra el target configurado
 - El A2DP Source en IDF 6.x es pull-based: el stack llama a un callback para obtener datos PCM
 - El buffer PCM desacopla la tarea de I2S del callback Bluetooth y absorbe variaciones breves de ritmo

@@ -34,6 +34,8 @@
 #define BSP_SINK_I2S_WS_PIN     25
 #define BSP_SINK_I2S_DATA_PIN   22
 #define BSP_SINK_I2S_SAMPLE_RATE 44100
+#define BSP_SINK_UART_TX_PIN      32
+#define BSP_SINK_UART_RX_PIN      33
 
 /*==================[typedef]================================================*/
 

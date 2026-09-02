@@ -65,6 +65,9 @@ typedef void (*bt_classic_source_state_cb_t)(bool connected);
  */
 typedef int32_t (*bt_classic_source_data_cb_t)(uint8_t *data, int32_t len);
 
+/** Called for every named device found by an explicit source-side scan. */
+typedef void (*bt_classic_source_scan_cb_t)(const char *name, const uint8_t *bda);
+
 /**
  * @brief A2DP connection state callback (sink or source role).
  *
@@ -119,6 +122,9 @@ bool bt_classic_hal_init_a2dp_source(bt_classic_source_state_cb_t state_cb,
  * @return true if discovery started.
  */
 bool bt_classic_hal_source_start_discovery(const char *target_name);
+
+/** Start a finite Bluetooth Classic scan without connecting to a result. */
+bool bt_classic_hal_source_start_scan(bt_classic_source_scan_cb_t scan_cb);
 
 /**
  * @brief Connect A2DP source to a specific device by address.

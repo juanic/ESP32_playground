@@ -18,15 +18,19 @@
 #include "audio_relay_source_bsp.h"
 #include "bt_classic_hal.h"
 #include "i2s_hal.h"
+#include "inter_board_link.h"
+#include "nvs_hal.h"
 
 /*==================[macros and definitions]=================================*/
 
 #define DEVICE_NAME         "Audio Relay Src"
-#define TARGET_BT_NAME      "BT-WUZHI"
 #define I2S_READ_BUF_SIZE   1024
 #define I2S_READ_TIMEOUT_MS 100
 #define RECONNECT_DELAY_MS  3000
 #define PCM_BUFFER_SIZE     (32 * 1024)
+#define TARGET_MAX_LEN      32
+#define NVS_NAMESPACE       "relay"
+#define NVS_KEY_TARGET      "target"
 
 /*==================[internal data definition]===============================*/
 
@@ -35,20 +39,101 @@ static bool s_source_connected = false;
 static StaticStreamBuffer_t s_pcm_buffer_storage;
 static uint8_t s_pcm_buffer_memory[PCM_BUFFER_SIZE];
 static StreamBufferHandle_t s_pcm_buffer;
+static char s_target[TARGET_MAX_LEN];
 
 /*==================[internal functions declaration]=========================*/
 
 static void on_source_state(bool connected);
 static int32_t on_source_data(uint8_t *data, int32_t len);
+static void on_speaker_found(const char *name, const uint8_t *bda);
+static void on_link_line(const char *line, void *ctx);
+static bool parse_mac(const char *text, uint8_t *bda);
+static void format_mac(const uint8_t *bda, char *out);
 
 /*==================[external functions definition]==========================*/
 
 static void on_source_state(bool connected) {
     s_source_connected = connected;
+    uint8_t bda[6];
+    char mac[18] = "-";
+    if (connected && bt_classic_hal_get_peer_bda(bda)) format_mac(bda, mac);
+    char line[96];
+    snprintf(line, sizeof(line), "%s name=%s mac=%s",
+             connected ? "SPEAKER_CONNECTED" : "SPEAKER_DISCONNECTED",
+             parse_mac(s_target, bda) ? "-" : (s_target[0] ? s_target : "-"), mac);
+    InterBoardLinkSend(line);
     if (connected) {
         ESP_LOGI(TAG, "A2DP source connected to amplifier");
     } else {
         ESP_LOGW(TAG, "A2DP source disconnected, will reconnect...");
+    }
+}
+
+static bool parse_mac(const char *text, uint8_t *bda) {
+    unsigned int value[6];
+    if (!text || sscanf(text, "%2x:%2x:%2x:%2x:%2x:%2x", &value[0], &value[1],
+                        &value[2], &value[3], &value[4], &value[5]) != 6) return false;
+    for (int i = 0; i < 6; i++) bda[i] = (uint8_t)value[i];
+    return true;
+}
+
+static void format_mac(const uint8_t *bda, char *out) {
+    sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+}
+
+static void connect_configured_target(void) {
+    uint8_t bda[6];
+    if (!s_target[0]) return;
+    if (parse_mac(s_target, bda)) {
+        bt_classic_hal_source_connect(bda);
+    } else {
+        bt_classic_hal_source_start_discovery(s_target);
+    }
+}
+
+static void on_speaker_found(const char *name, const uint8_t *bda) {
+    char mac[18];
+    format_mac(bda, mac);
+    char line[96];
+    snprintf(line, sizeof(line), "SPEAKER_FOUND name=%s mac=%s", name, mac);
+    InterBoardLinkSend(line);
+}
+
+static void send_target(void) {
+    uint8_t bda[6];
+    char line[96];
+    if (parse_mac(s_target, bda)) {
+        snprintf(line, sizeof(line), "TARGET name=- mac=%s connected=%d", s_target,
+                 s_source_connected ? 1 : 0);
+    } else {
+        snprintf(line, sizeof(line), "TARGET name=%s mac=- connected=%d",
+                 s_target[0] ? s_target : "-", s_source_connected ? 1 : 0);
+    }
+    InterBoardLinkSend(line);
+}
+
+static void on_link_line(const char *line, void *ctx) {
+    (void)ctx;
+    if (strcmp(line, "SCAN_TARGET") == 0) {
+        InterBoardLinkSend(bt_classic_hal_source_start_scan(on_speaker_found) ? "OK" : "ERR BUSY");
+    } else if (strncmp(line, "SET_TARGET ", 11) == 0 && line[11]) {
+        snprintf(s_target, sizeof(s_target), "%s", line + 11);
+        if (!NvsHalSetStr(NVS_NAMESPACE, NVS_KEY_TARGET, s_target)) {
+            InterBoardLinkSend("ERR TARGET");
+            return;
+        }
+        uint8_t bda[6];
+        char response[96];
+        snprintf(response, sizeof(response), "TARGET OK name=%s mac=%s",
+                 parse_mac(s_target, bda) ? "-" : s_target,
+                 parse_mac(s_target, bda) ? s_target : "-");
+        InterBoardLinkSend(response);
+        if (s_source_connected) bt_classic_hal_disconnect();
+        else connect_configured_target();
+    } else if (strcmp(line, "GET_TARGET") == 0) {
+        send_target();
+    } else {
+        InterBoardLinkSend("ERR UNKNOWN");
     }
 }
 
@@ -71,15 +156,29 @@ void app_main(void) {
         return;
     }
 
+    if (!NvsHalInit()) {
+        ESP_LOGE(TAG, "NVS init failed");
+        return;
+    }
+    NvsHalGetStr(NVS_NAMESPACE, NVS_KEY_TARGET, s_target, sizeof(s_target));
+
+    if (!InterBoardLinkInit(BSP_SOURCE_UART_TX_PIN, BSP_SOURCE_UART_RX_PIN, on_link_line, NULL)) {
+        ESP_LOGE(TAG, "Inter-board UART init failed");
+        return;
+    }
+
     /* Initialize BSP (I2S RX + A2DP Source) */
     if (!AudioRelaySourceBspInit(DEVICE_NAME, on_source_state, on_source_data)) {
         ESP_LOGE(TAG, "BSP init failed!");
         return;
     }
 
-    /* Start discovery for target amplifier */
-    ESP_LOGI(TAG, "Looking for target: %s", TARGET_BT_NAME);
-    bt_classic_hal_source_start_discovery(TARGET_BT_NAME);
+    if (s_target[0]) {
+        ESP_LOGI(TAG, "Connecting to saved target: %s", s_target);
+        connect_configured_target();
+    } else {
+        ESP_LOGI(TAG, "No target configured; waiting for SET_TARGET");
+    }
 
     /* I2S read buffer */
     uint8_t i2s_buf[I2S_READ_BUF_SIZE];
@@ -89,9 +188,9 @@ void app_main(void) {
         if (!s_source_connected) {
             /* Wait for connection, retry discovery periodically */
             vTaskDelay(pdMS_TO_TICKS(RECONNECT_DELAY_MS));
-            if (!bt_classic_hal_is_connected()) {
-                ESP_LOGI(TAG, "Retrying discovery...");
-                bt_classic_hal_source_start_discovery(TARGET_BT_NAME);
+            if (!bt_classic_hal_is_connected() && s_target[0]) {
+                ESP_LOGI(TAG, "Retrying target connection...");
+                connect_configured_target();
             }
             continue;
         }

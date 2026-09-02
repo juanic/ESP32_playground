@@ -38,6 +38,7 @@ static bool s_is_source = false;
 static bt_classic_sink_data_cb_t s_sink_data_cb = NULL;
 static bt_classic_source_state_cb_t s_source_state_cb = NULL;
 static bt_classic_source_data_cb_t s_source_data_cb = NULL;
+static bt_classic_source_scan_cb_t s_source_scan_cb = NULL;
 static bt_classic_conn_state_cb_t s_conn_cb = NULL;
 
 /* Source state machine */
@@ -48,6 +49,7 @@ enum {
     SRC_STATE_CONNECTING,
     SRC_STATE_CONNECTED,
     SRC_STATE_DISCONNECTING,
+    SRC_STATE_SCANNING,
 };
 static int s_src_state = SRC_STATE_IDLE;
 
@@ -100,7 +102,7 @@ static bool get_name_from_eir(uint8_t *eir, uint8_t *bdname, uint8_t *bdname_len
 static void gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param) {
     switch (event) {
     case ESP_BT_GAP_DISC_RES_EVT: {
-        if (s_src_state != SRC_STATE_DISCOVERING) break;
+        if (s_src_state != SRC_STATE_DISCOVERING && s_src_state != SRC_STATE_SCANNING) break;
 
         char bda_str[18];
         ESP_LOGI(TAG, "Scanned: %s", bda2str(param->disc_res.bda, bda_str, sizeof(bda_str)));
@@ -116,6 +118,10 @@ static void gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t
         if (eir) {
             uint8_t name_len = 0;
             if (get_name_from_eir(eir, (uint8_t *)s_peer_name, &name_len)) {
+                if (s_src_state == SRC_STATE_SCANNING) {
+                    if (s_source_scan_cb) s_source_scan_cb(s_peer_name, param->disc_res.bda);
+                    break;
+                }
                 if (strcmp(s_peer_name, s_target_name) == 0) {
                     ESP_LOGI(TAG, "Found target: %s", s_peer_name);
                     memcpy(s_peer_bda, param->disc_res.bda, BT_CLASSIC_BD_ADDR_LEN);
@@ -135,6 +141,9 @@ static void gap_event_handler(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t
             } else if (s_src_state == SRC_STATE_DISCOVERING) {
                 ESP_LOGI(TAG, "Target not found, restarting discovery...");
                 esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+            } else if (s_src_state == SRC_STATE_SCANNING) {
+                s_src_state = SRC_STATE_IDLE;
+                s_source_scan_cb = NULL;
             }
         }
         break;
@@ -390,9 +399,24 @@ bool bt_classic_hal_init_a2dp_source(bt_classic_source_state_cb_t state_cb,
 
 bool bt_classic_hal_source_start_discovery(const char *target_name) {
     if (!s_is_source || !target_name) return false;
+    if (s_src_state == SRC_STATE_DISCOVERING || s_src_state == SRC_STATE_SCANNING) return false;
 
     strncpy(s_target_name, target_name, ESP_BT_GAP_MAX_BDNAME_LEN);
     source_connect_to_target();
+    return true;
+}
+
+bool bt_classic_hal_source_start_scan(bt_classic_source_scan_cb_t scan_cb) {
+    if (!s_is_source || !scan_cb) return false;
+    if (s_src_state == SRC_STATE_DISCOVERING || s_src_state == SRC_STATE_SCANNING) return false;
+    s_source_scan_cb = scan_cb;
+    s_src_state = SRC_STATE_SCANNING;
+    esp_err_t ret = esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+    if (ret != ESP_OK) {
+        s_src_state = SRC_STATE_IDLE;
+        s_source_scan_cb = NULL;
+        return false;
+    }
     return true;
 }
 
@@ -461,6 +485,7 @@ bool bt_classic_hal_init_a2dp_sink(bt_classic_sink_data_cb_t data_cb) { return f
 bool bt_classic_hal_init_a2dp_source(bt_classic_source_state_cb_t state_cb,
                                      bt_classic_source_data_cb_t data_cb) { return false; }
 bool bt_classic_hal_source_start_discovery(const char *target_name) { return false; }
+bool bt_classic_hal_source_start_scan(bt_classic_source_scan_cb_t scan_cb) { return false; }
 bool bt_classic_hal_source_connect(const uint8_t *bda) { return false; }
 int bt_classic_hal_source_write(const uint8_t *data, int32_t len) { return -1; }
 void bt_classic_hal_disconnect(void) {}

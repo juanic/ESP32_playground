@@ -24,6 +24,18 @@ El sink opera como **maestro I2S**: genera `BCLK` y `WS` y transmite el
 PCM por `DATA`. Conectar BCLK-BCLK, WS-WS, DATA-DATA y GND con la placa
 source; no conectar otro dispositivo que genere esos relojes.
 
+### Control inter-placa (UART)
+
+| Señal | GPIO sink | GPIO source |
+|-------|:---------:|:-----------:|
+| TX    | 32        | RX 32       |
+| RX    | 33        | TX 33       |
+| GND   | común     | común       |
+
+El enlace usa UART a 115200, 8N1. Debe cablearse cruzado: GPIO 32 del sink
+(TX) a GPIO 32 del source (RX), y GPIO 33 del source (TX) a GPIO 33 del sink
+(RX). El protocolo usa lineas ASCII terminadas en `\n`.
+
 ## Compilar y flashear
 
 ```bash
@@ -87,6 +99,9 @@ Los comandos con `*` requieren autenticacion previa (`AUTH`).
 | `GET_META` | — | Metadata "now playing" (titulo, artista, album, estado) |
 | `SYNC_TIME *` | `<epoch_unix>` | Sincroniza el reloj del dispositivo (hora actual en segundos Unix) |
 | `GRANT *` | `<AA:BB:CC:DD:EE:FF>` `<min>` | Concede a esa MAC `min` minutos de reproduccion desde ahora |
+| `SCAN_TARGET *` | — | Pide al source buscar parlantes Bluetooth cercanos |
+| `SET_TARGET *` | `<nombre_o_MAC>` | Configura y persiste el parlante destino en el source |
+| `GET_TARGET` | — | Consulta el target y estado de conexión del source |
 
 ### Respuestas (RSP)
 
@@ -102,6 +117,9 @@ Los comandos con `*` requieren autenticacion previa (`AUTH`).
 - `META title=... artist=... album=... play=...`
 - `PEER <mac> WL=... BL=... GRANT=... EXP=...`
 - `TIME OK epoch=...` / `GRANT OK mac=... expiry=...`
+- `TARGET OK name=... mac=...` — target guardado por el source
+- `TARGET name=... mac=... connected=0|1` — estado del target configurado
+- `ERR TARGET_TIMEOUT` — el source no respondió por UART en dos segundos
 
 ### Eventos (EVT)
 
@@ -111,6 +129,8 @@ Los comandos con `*` requieren autenticacion previa (`AUTH`).
 - `META title=... artist=... album=... play=... track_new=...`
 - `TIME epoch=...`
 - `GRANT mac=... minutes=...`
+- `SPEAKER_FOUND name=... mac=...`
+- `SPEAKER_CONNECTED name=... mac=...` / `SPEAKER_DISCONNECTED name=... mac=...`
 
 ### Contrasena por defecto
 
@@ -176,6 +196,8 @@ drivers_hal/avrcp_hal.c               (metadata AVRCP)
 drivers_hal/i2s_hal.c                 (wrapper I2S)
 drivers_hal/bt_classic_hal.c          (wrapper A2DP + dual-mode controller)
 drivers_hal/time_hal.c                (reloj virtual: epoch App + uptime)
+middleware/inter_board_link.c         (protocolo de control UART entre placas)
+drivers_hal/uart_link_hal.c           (transporte UART ASCII)
 ```
 
 La transmision de audio se gatesa en `main.c` (`on_audio_data`) segun `RelayControlIsTxEnabled()`.
