@@ -9,6 +9,14 @@ set(srcs "src/gpio_hal.c"
 # BLE HID driver — always listed, guarded by #if CONFIG_BT_ENABLED inside
 list(APPEND srcs "src/ble_hid_kb.c")
 
+# Audio relay drivers
+list(APPEND srcs "src/i2s_hal.c"
+                 "src/bt_classic_hal.c"
+                 "src/nvs_hal.c"
+                 "src/avrcp_hal.c"
+                 "src/ble_control_hal.c"
+                 "src/time_hal.c")
+
 # Always included headers
 set(includes "inc")
 
@@ -16,7 +24,7 @@ set(includes "inc")
 # Since ble_hid_kb.c guards itself with #if CONFIG_BT_ENABLED,
 # the symbols are weak/empty when BT is off. Add deps always
 # so cmake resolves them; when BT is off they just won't link.
-set(deps esp_driver_touch_sens bt nvs_flash)
+set(deps esp_driver_touch_sens esp_driver_i2s bt nvs_flash)
 
 idf_component_register(SRCS ${srcs}
                        INCLUDE_DIRS ${includes}

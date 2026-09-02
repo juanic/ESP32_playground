@@ -29,6 +29,12 @@
         },
         {
             "path": "apps/3_ble_media_key"
+        },
+        {
+            "path": "apps/audio_relay_sink"
+        },
+        {
+            "path": "apps/audio_relay_source"
         }
     ],
     "settings": {

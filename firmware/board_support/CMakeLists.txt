@@ -2,6 +2,8 @@ idf_build_get_property(target IDF_TARGET)
 
 # Always compiled source files
 set(srcs "src/led.c"
+         "src/audio_relay_sink_bsp.c"
+         "src/audio_relay_source_bsp.c"
     )
 
 # Always included headers

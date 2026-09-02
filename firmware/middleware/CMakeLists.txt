@@ -2,6 +2,8 @@ idf_build_get_property(target IDF_TARGET)
 
 # Always compiled source files
 set(srcs "src/animation.c"
+         "src/bt_access_control.c"
+         "src/relay_control.c"
     )
 
 # Always included headers

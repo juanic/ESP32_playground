@@ -13,6 +13,16 @@ Este módulo organiza secuencias de encendido y efectos visuales sobre los LEDs 
 
 * **Cabecera:** [animation.h](./inc/animation.h)
 
+### Acceso por MAC (`bt_access_control`)
+Gestiona listas blancas/negras de direcciones Bluetooth (MAC) persistiéndolas en NVS. Lógica pura de negocio, sin dependencia de hardware más allá del almacenamiento.
+
+* **Cabecera:** [bt_access_control.h](./inc/bt_access_control.h)
+
+### Control del Relay (`relay_control`)
+Plano de control del audio relay (sink): autenticación por contraseña, habilitación/deshabilitación de la transmisión de audio, desconexión del peer A2DP, filtrado de MACs, consulta de metadata y reenvío de eventos a una App vía BLE.
+
+* **Cabecera:** [relay_control.h](./inc/relay_control.h)
+
 ---
 
 ## Modos de Animación (`animation_t`)
