@@ -32,6 +32,13 @@
 #define NVS_NAMESPACE       "relay"
 #define NVS_KEY_TARGET      "target"
 
+/* FAST_TEST: hardcodes the target speaker for I2S wiring bench tests,
+ * bypassing NVS/SET_TARGET. Remove/comment out once wiring is validated. */
+#define FAST_TEST 0
+#if FAST_TEST
+#define FAST_TEST_TARGET_NAME "BT-WUZHI"
+#endif
+
 /*==================[internal data definition]===============================*/
 
 static const char *TAG = "audio_relay_source";
@@ -161,6 +168,11 @@ void app_main(void) {
         return;
     }
     NvsHalGetStr(NVS_NAMESPACE, NVS_KEY_TARGET, s_target, sizeof(s_target));
+
+#if FAST_TEST
+    snprintf(s_target, sizeof(s_target), "%s", FAST_TEST_TARGET_NAME);
+    ESP_LOGW(TAG, "FAST_TEST enabled: hardcoded target speaker \"%s\"", s_target);
+#endif
 
     if (!InterBoardLinkInit(BSP_SOURCE_UART_TX_PIN, BSP_SOURCE_UART_RX_PIN, on_link_line, NULL)) {
         ESP_LOGE(TAG, "Inter-board UART init failed");
