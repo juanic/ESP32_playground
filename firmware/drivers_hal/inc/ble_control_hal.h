@@ -11,21 +11,23 @@
  * @section genDesc General Description
  *
  * Exposes a small Bluetooth Low Energy (BLE) GATT server used as a
- * control channel. The App (GATT client) writes ASCII command lines to
- * the CMD characteristic; the firmware replies with text lines on the
- * RSP characteristic and pushes unsolicited events on the EVT
- * characteristic.
+ * control channel, compatible with Nordic's UART Service (NUS) so that
+ * off-the-shelf NUS client libraries (nRF Connect, NUS Android/iOS SDKs,
+ * etc.) can talk to it without custom GATT discovery code. The App (GATT
+ * client) writes ASCII command lines to the RX characteristic; the
+ * firmware replies with text lines and pushes unsolicited events on the
+ * single TX characteristic (both share the same notify channel, as NUS
+ * only defines one).
  *
  * This HAL only handles the BLE transport (line framing + notifications).
  * It contains no command logic — the application/middleware parses the
  * received lines via the registered callback.
  *
- * Service UUID: 0xFFC0
- * | Characteristic | UUID | Properties  |
- * |----------------|------|-------------|
- * | CMD            | 0xFFC1 | Write, Write No Response |
- * | RSP            | 0xFFC2 | Notify                    |
- * | EVT            | 0xFFC3 | Notify                    |
+ * Service UUID: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E (Nordic UART Service)
+ * | Characteristic | UUID                                   | Properties  |
+ * |----------------|-----------------------------------------|-------------|
+ * | RX (cmd)       | 6E400002-B5A3-F393-E0A9-E50E24DCCA9E     | Write, Write No Response |
+ * | TX (rsp/evt)   | 6E400003-B5A3-F393-E0A9-E50E24DCCA9E     | Notify      |
  *
  * @note Control lines are terminated with '\n' (or '\r').
  *
@@ -38,11 +40,6 @@
 #include <stdint.h>
 #include <stddef.h>
 /*==================[macros]=================================================*/
-
-#define BLE_CONTROL_SERVICE_UUID      0xFFC0
-#define BLE_CONTROL_CMD_UUID          0xFFC1
-#define BLE_CONTROL_RSP_UUID          0xFFC2
-#define BLE_CONTROL_EVT_UUID          0xFFC3
 
 #define BLE_CONTROL_MAX_LINE_LEN      128
 #define BLE_CONTROL_MAX_PKT_LEN       244

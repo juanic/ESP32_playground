@@ -69,17 +69,17 @@ El archivo `sdkconfig.defaults` ya configura el modo dual (BLE + Classic) sobre 
 
 ## Canal de control BLE (GATT)
 
-Servicio custom UUID **`0xFFC0`** con tres caracteristicas:
+Expone el **Nordic UART Service (NUS)** — UUID **`6E400001-B5A3-F393-E0A9-E50E24DCCA9E`** — para poder usar librerias/clientes NUS estandar (nRF Connect, SDKs NUS Android/iOS) sin necesidad de descubrimiento GATT custom:
 
-| Caracteristica | UUID   | Propiedades |
-|----------------|--------|-------------|
-| CMD            | 0xFFC1 | Write / Write No Response |
-| RSP            | 0xFFC2 | Notify |
-| EVT            | 0xFFC3 | Notify |
+| Caracteristica | UUID | Propiedades |
+|----------------|------|-------------|
+| RX (comandos)  | `6E400002-B5A3-F393-E0A9-E50E24DCCA9E` | Write / Write No Response |
+| TX (respuestas + eventos) | `6E400003-B5A3-F393-E0A9-E50E24DCCA9E` | Notify |
 
-- La App **escribe** comandos en texto ASCII (terminados en `\n`) en `CMD`
-- El firmware **responde** por `RSP` y **emite eventos no solicitados** por `EVT`
-- Requiere suscribirse a `RSP`/`EVT` (CCCD = 0x0001) para recibir notificaciones
+- La App **escribe** comandos en texto ASCII (terminados en `\n`) en `RX`
+- El firmware **responde** y **emite eventos no solicitados** por la misma caracteristica `TX` (NUS solo define un canal de salida)
+- Se envian como **notifications** (no requieren indicate/ACK), pero sigue siendo obligatorio habilitar notificaciones escribiendo `0x0100` en el CCCD (`0x2902`) de `TX` — la mayoria de librerias NUS lo hacen automaticamente
+- El UUID del servicio va en el **scan response** (no entra en el paquete de advertising junto con el nombre)
 
 ### Comandos
 
@@ -191,7 +191,7 @@ apps/audio_relay_sink/main.c          (orquestacion + gate de audio)
 middleware/relay_control.c            (plano de control: auth, TX, filtros, tiempo, eventos)
 middleware/bt_access_control.c        (logica de acceso por MAC)
 board_support/audio_relay_sink_bsp.c  (config de placa)
-drivers_hal/ble_control_hal.c         (transporte BLE GATT: CMD/RSP/EVT)
+drivers_hal/ble_control_hal.c         (transporte BLE GATT: NUS RX/TX)
 drivers_hal/avrcp_hal.c               (metadata AVRCP)
 drivers_hal/i2s_hal.c                 (wrapper I2S)
 drivers_hal/bt_classic_hal.c          (wrapper A2DP + dual-mode controller)
