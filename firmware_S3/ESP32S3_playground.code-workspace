@@ -33,6 +33,9 @@
         {
             "path": "apps/4_hid_touch"
         }
+		 {
+            "path": "apps/usb_msc_laser_bridge"
+        }
     ],
     "settings": {
         "idf.adapterTargetName": "esp32s3",

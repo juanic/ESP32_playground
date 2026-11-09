@@ -9,6 +9,11 @@
 *.class
 .pytest_cache/
 
+# Python virtual environments and model weights
+**/.venv/
+**/venv/
+*.pt
+
 # Configuration and temp files
 **/sdkconfig.old
 **/sdkconfig.ci

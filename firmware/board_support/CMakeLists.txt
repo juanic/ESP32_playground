@@ -6,6 +6,11 @@ set(srcs "src/led.c"
          "src/audio_relay_source_bsp.c"
     )
 
+# Optional AI-Thinker ESP32-CAM BSP.
+if(CONFIG_CAMERA_HAL_ENABLED)
+    list(APPEND srcs "src/camera_ai_thinker_bsp.c")
+endif()
+
 # Always included headers
 set(includes "inc")
 

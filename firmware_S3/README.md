@@ -8,15 +8,23 @@ desarrollado con **ESP-IDF v6.0.1** y organizado en capas reutilizables
 
 ```
 firmware_S3/
-├── middleware/        # Servicios lógicos intermedios (p.ej. animaciones de LEDs)
-├── board_support/     # Board Support Package (LEDs de la placa)
-├── drivers_hal/       # Hardware Abstraction Layer: GPIO, touch, HID (BLE/USB)
+├── middleware/        # Servicios lógicos intermedios (p.ej. FSM, HTTP server,
+                       # animaciones de LEDs)
+├── board_support/     # Board Support Package (LEDs de la placa, definiciones
+                       # de pines SD y botón)
+├── drivers_hal/       # Hardware Abstraction Layer: GPIO, touch, HID (BLE/USB),
+                       # SD card, botón con antirrebote, MSC USB, LED
 └── apps/              # Aplicaciones de ejemplo
     ├── 0_blinking/    # Parpadeo de LED (plantilla mínima)
-    ├── 1_touch/       # Lectura de pines táctiles capacitivos
+    ├── 1_touch/       # Lectura de pines táctiles capacitivos con detección
+    #                   relativa (baseline + delta). Ideal para calibrar
+    #      umbrales antes de usar en 4_hid_touch.
     ├── 2_ble_hid/     # HID por Bluetooth Low Energy (teclas multimedia)
     ├── 3_usb_hid/     # HID por USB (TinyUSB) - teclas multimedia cíclicas
     ├── 4_hid_touch/   # HID táctil: cada pad envía una tecla multimedia
+    ├── 5_usb_msc_laser/  # **NUEVA APP**: Server <-> MSC mode switch
+    │                   # (botón físico alterna entre modo HTTP server
+    # y modo USB MSC para controladora de láser).
     └── x_template/    # Plantilla genérica para crear nuevas apps
 ```
 
@@ -33,6 +41,11 @@ firmware_S3/
   - `usb_hid_kb` : HID Consumer Control por USB nativo con `esp_tinyusb` (TinyUSB).
   - Ambos exponen la **misma API** (`*_driver_init`, `send_key(media_key_t)`,
     `is_connected`) y comparten el tipo `media_key_t` en `hid_common.h`.
+- **nueva capa agregada**:
+  - **sd_hal**: Montaje/desmontaje de FAT en microSD (`sd_mount`, `sd_unmount`).
+  - **button_hal**: Botón con antirrebounce software (`btn_hal_init`, `btn_hal_read`).
+  - **tinyusb_msc**: Controlador TinyUSB MSC (init, connect, disconnect).
+  - **LED wrapper**: Control de la LED addressable de la placa.
 
 El transporte se elige en `drivers_hal/Kconfig` con
 `CONFIG_HID_TRANSPORT_NONE` / `_BLE` / `_USB` / `_BOTH` (por defecto **None**,
@@ -43,8 +56,8 @@ ni TinyUSB).
 
 - ESP-IDF **v6.0.1** (IDF en `C:\esp\v6.0.1\esp-idf`, herramientas en
   `C:\Espressif\tools`).
-- Placa **ESP32-S3**. Las apps USB / HID táctil (`3_usb_hid`, `4_hid_touch`)
-  usan el USB nativo, ideal en la XIAO ESP32-S3.
+- Placa **ESP32-S3**. Las apps USB / HID táctil usan el USB nativo, ideal en
+  la XIAO ESP32-S3.
 
 ## Compilación
 
@@ -77,26 +90,58 @@ idf.py -p COMx flash monitor
   CONFIG_BT_HID_DEVICE_ENABLED=y
   CONFIG_BT_GATTS_ENABLE=y
   ```
+- **Ninguno (default)** (`1_touch`, `usb_msc_laser`):
+  ```
+  CONFIG_HID_TRANSPORT_NONE=y
+  ```
 
-## App `4_hid_touch` (HID táctil)
+## App `1_touch` (Depuración de touch)
 
-Cada canal táctil se mapea a una tecla multimedia (play/pause, next, prev,
-vol+, vol−, stop). Al arrancar se **calibra la línea base** de cada canal
-(promedio de 32 muestras); luego se dispara la tecla cuando la lectura supera
-la base en **200** puntos (detección por flanco, un solo envío aunque se mantenga
-el dedo).
+Depura la lectura de los pines táctiles T4..T9 del ESP32-S3 y muestra los
+valores crudos y la desviación respecto a la baseline capturada al arranque.
+Útil para afinar `TOUCH_DELTA_TRIGGER` (200) antes de usar en `4_hid_touch`.
 
-Mapeo en `s_map[]` (`apps/4_hid_touch/main/4_hid_touch.c`):
-T4=Next, T5=Vol+, T6=Pause, T7=Play, T8=Vol−, T9=Back
-(`TOUCH_PAD_4..9` → GPIO 5..10). Ajusta la tabla a los pines que realmente
-uses en tu placa. Para observar los valores crudos de esos canales y calibrar
-el umbral, compila la app `1_touch`.
+Mapeo T4..T9 → GPIO 5..10. El `d=` mostrado en consola es la desviación
+respecto a la baseline; el `*` indica que supera el umbral de 200.
 
-## Componentes locales (USB)
+## App `usb_msc_laser_bridge` (Server <-> MSC)
 
-Para el transporte USB, `esp_tinyusb` y `tinyusb` se incluyen como componentes
-**locales** bajo `apps/<app>/components/` (sin metadatos de gestor de
-componentes), por lo que no requieren conexión ni `idf_component.yml`.
+Esta aplicación alterna entre dos modos de operación en el XIAO ESP32S3 Sense:
+
+- **Modo SERVIDOR** (por defecto): El ESP32-S3 actúa como un servidor HTTP
+  simple con un endpoint `/upload` que recibe archivos y los guarda en la
+  microSD. El botón mantiene este modo.
+
+- **Modo PENDRIVE**: Al pulsar el botón, el dispositivo se transforma en un
+  pendrive USB MSC (Mass Storage Class) para la controladora del láser. La
+  microSD es el almacenamiento interno. Las funciones clave:
+  - **Transición Servidor → PENDRIVE**:
+    * Desactiva el servidor HTTP.
+    * Desmonta el sistema de archivos FAT.
+    * Inicializa TinyUSB MSC y llama a `tud_connect()` para que el host
+      enumerate el drive sin replug físico.
+  - **Transición PENDRIVE → Servidor**:
+    * Llama a `tud_disconnect()` primero (eject prolijo).
+    * Espera ~250 ms para que el host termine de leer/escribir.
+    * Vuelve a montar el sistema de archivos FAT local.
+    * Reactiva el servidor HTTP.
+
+- **LED indicador**: El LED addressable de la placa cambia de color/patrón
+  según el modo actual (verde = Servidor, azul = PENDRIVE, rojo = transición).
+  El patrón de "transición" parpadea durante el cambio de modo.
+
+- **Alimentación**: El dispositivo queda alimentado permanentemente por el
+  puerto USB de la controladora del láser (bus-powered). No asumir que hay
+  alimentación externa.
+
+## Estructura de dependencias
+
+```
+apps/              ──────────► board_support, middleware
+board_support/ ──────► drivers_hal
+middleware/ ───────► board_support, drivers_hal
+drivers_hal/ ────────► APIs de ESP-IDF directamente
+```
 
 ## Autor
 

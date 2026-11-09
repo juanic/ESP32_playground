@@ -1,0 +1,24 @@
+menu "HAL drivers"
+
+    config CAMERA_HAL_ENABLED
+        bool "Enable camera (DVP) HAL"
+        default n
+        help
+            Compiles the camera HAL and adds the esp32-camera component as a
+            dependency. Only enable it in applications that use a DVP camera.
+
+    config WIFI_HAL_ENABLED
+        bool "Enable Wi-Fi station HAL"
+        default n
+        help
+            Compiles the Wi-Fi station HAL. Only enable it in applications
+            that connect to a wireless network.
+
+    config SD_HAL_ENABLED
+        bool "Enable SD card (SDMMC) HAL"
+        default n
+        help
+            Compiles the SD card HAL, which mounts a FAT filesystem on the
+            SDMMC host and exposes it through the VFS layer.
+
+endmenu

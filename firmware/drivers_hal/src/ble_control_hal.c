@@ -1,6 +1,9 @@
 /**
  * @file ble_control_hal.c
  * @brief BLE GATT server text-line transport for device control (Bluedroid).
+ *
+ * Uses a static GATT attribute table (same architecture as the working
+ * stabilometry platform firmware) for maximum compatibility with Android.
  */
 
 #include "ble_control_hal.h"
@@ -15,33 +18,131 @@
 #include "esp_gatts_api.h"
 #include "esp_gatt_common_api.h"
 #include "esp_bt_defs.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
+#include <stdlib.h>
 
 static const char *TAG = "ble_control_hal";
 
-/* ======================== UUIDs (Nordic UART Service) ======================== */
+/* ======================== NUS UUIDs (128-bit, little-endian) ======================== */
 
-/* 128-bit UUIDs stored little-endian (LSB first), as required by esp_bt_uuid_t. */
 static const uint8_t nus_svc_uuid128[16] = {
     0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
     0x93, 0xf3, 0xa3, 0xb5, 0x01, 0x00, 0x40, 0x6e,
 }; /* 6E400001-B5A3-F393-E0A9-E50E24DCCA9E */
+
 static const uint8_t nus_rx_uuid128[16] = {
     0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
     0x93, 0xf3, 0xa3, 0xb5, 0x02, 0x00, 0x40, 0x6e,
 }; /* 6E400002-B5A3-F393-E0A9-E50E24DCCA9E */
+
 static const uint8_t nus_tx_uuid128[16] = {
     0x9e, 0xca, 0xdc, 0x24, 0x0e, 0xe5, 0xa9, 0xe0,
     0x93, 0xf3, 0xa3, 0xb5, 0x03, 0x00, 0x40, 0x6e,
 }; /* 6E400003-B5A3-F393-E0A9-E50E24DCCA9E */
 
-static esp_bt_uuid_t uuid_svc = {.len = ESP_UUID_LEN_128};
-static esp_bt_uuid_t uuid_rx  = {.len = ESP_UUID_LEN_128};
-static esp_bt_uuid_t uuid_tx  = {.len = ESP_UUID_LEN_128};
-static esp_bt_uuid_t uuid_ccc = {.len = ESP_UUID_LEN_16, .uuid.uuid16 = 0x2902};
+/* ======================== Static GATT attribute table ======================== */
+
+enum {
+    NUS_IDX_SVC,
+    NUS_IDX_RX_CHAR,
+    NUS_IDX_RX_VAL,
+    NUS_IDX_TX_CHAR,
+    NUS_IDX_TX_VAL,
+    NUS_IDX_TX_CCC,
+    NUS_IDX_NB,
+};
+
+/* 16-bit UUID constants */
+static const uint16_t primary_service_uuid  = ESP_GATT_UUID_PRI_SERVICE;
+static const uint16_t char_decl_uuid        = ESP_GATT_UUID_CHAR_DECLARE;
+static const uint16_t ccc_uuid              = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+
+/* Buffers */
+static uint8_t svc_uuid_buf[16];  /* filled at init with 128-bit NUS service UUID */
+static uint8_t rx_val_buf[BLE_CONTROL_MAX_LINE_LEN] = {0};
+static uint8_t tx_val_buf[BLE_CONTROL_MAX_LINE_LEN] = {0};
+static uint8_t ccc_val_buf[2] = {0x00, 0x00};
+
+/* Characteristic properties */
+static const uint8_t rx_char_props = ESP_GATT_CHAR_PROP_BIT_WRITE_NR | ESP_GATT_CHAR_PROP_BIT_WRITE;
+static const uint8_t tx_char_props = ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY;
+
+static const esp_gatts_attr_db_t nus_gatt_db[NUS_IDX_NB] = {
+    /* Service Declaration */
+    [NUS_IDX_SVC] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = sizeof(uint16_t),
+            .uuid_p      = (uint8_t *) &primary_service_uuid,
+            .perm        = ESP_GATT_PERM_READ,
+            .max_length  = 16,
+            .length      = 16,
+            .value       = svc_uuid_buf,
+        },
+    },
+    /* RX Characteristic Declaration */
+    [NUS_IDX_RX_CHAR] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = sizeof(uint16_t),
+            .uuid_p      = (uint8_t *) &char_decl_uuid,
+            .perm        = ESP_GATT_PERM_READ,
+            .max_length  = sizeof(uint8_t),
+            .length      = sizeof(uint8_t),
+            .value       = (uint8_t *) &rx_char_props,
+        },
+    },
+    /* RX Characteristic Value */
+    [NUS_IDX_RX_VAL] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = ESP_UUID_LEN_128,
+            .uuid_p      = (uint8_t *) nus_rx_uuid128,
+            .perm        = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+            .max_length  = BLE_CONTROL_MAX_LINE_LEN,
+            .length      = 0,
+            .value       = rx_val_buf,
+        },
+    },
+    /* TX Characteristic Declaration */
+    [NUS_IDX_TX_CHAR] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = sizeof(uint16_t),
+            .uuid_p      = (uint8_t *) &char_decl_uuid,
+            .perm        = ESP_GATT_PERM_READ,
+            .max_length  = sizeof(uint8_t),
+            .length      = sizeof(uint8_t),
+            .value       = (uint8_t *) &tx_char_props,
+        },
+    },
+    /* TX Characteristic Value */
+    [NUS_IDX_TX_VAL] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = ESP_UUID_LEN_128,
+            .uuid_p      = (uint8_t *) nus_tx_uuid128,
+            .perm        = ESP_GATT_PERM_READ,
+            .max_length  = BLE_CONTROL_MAX_LINE_LEN,
+            .length      = 0,
+            .value       = tx_val_buf,
+        },
+    },
+    /* TX CCCD */
+    [NUS_IDX_TX_CCC] = {
+        .attr_control = { .auto_rsp = ESP_GATT_AUTO_RSP },
+        .att_desc = {
+            .uuid_length = sizeof(uint16_t),
+            .uuid_p      = (uint8_t *) &ccc_uuid,
+            .perm        = ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
+            .max_length  = sizeof(uint16_t),
+            .length      = sizeof(uint16_t),
+            .value       = ccc_val_buf,
+        },
+    },
+};
 
 /* ======================== State ======================== */
 
@@ -52,11 +153,8 @@ static uint16_t      s_conn_id  = 0;
 static bool          s_connected = false;
 static esp_bd_addr_t s_remote_bda = {0};
 
-static uint16_t s_svc_handle   = 0;
-static uint16_t s_rx_handle    = 0;
-static uint16_t s_tx_handle    = 0;
-static uint16_t s_tx_ccc       = 0;
-static uint16_t s_tx_ccc_val   = 0;
+static uint16_t s_handle_table[NUS_IDX_NB] = {0};
+static uint16_t s_tx_ccc_val = 0;
 
 static ble_control_cmd_cb_t s_cmd_cb = NULL;
 static void *s_cmd_ctx = NULL;
@@ -83,9 +181,8 @@ static esp_ble_adv_params_t adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-/* Flags only; device name appended at runtime (capped to 31 bytes). */
 static const uint8_t adv_raw_prefix[] = {
-    0x02, 0x01, 0x06,                        /* Flags */
+    0x02, 0x01, 0x06,  /* Flags */
 };
 
 /* ======================== Send helpers ======================== */
@@ -100,7 +197,7 @@ static void send_notify(uint16_t char_handle, uint16_t ccc_val, const char *line
     }
     uint8_t pkt[BLE_CONTROL_MAX_PKT_LEN];
     memcpy(pkt, line, len);
-    /* false = notification (no CCCD write / ACK required from client) */
+    /* false = notification (not indication) */
     esp_ble_gatts_send_indicate(s_gatt_if, s_conn_id, char_handle,
                                 (uint16_t)len, pkt, false);
 }
@@ -130,7 +227,7 @@ bool ble_control_hal_init(const char *device_name, ble_control_cmd_cb_t cmd_cb, 
     esp_ble_gap_set_device_name(s_device_name);
     esp_ble_gatt_set_local_mtu(517);
 
-    /* Register GATTS app — triggers ESP_GATTS_REG_EVT → s_gatt_if */
+    /* Register GATTS app — triggers ESP_GATTS_REG_EVT */
     esp_ble_gatts_app_register(0x02);
 
     ESP_LOGI(TAG, "BLE Control HAL initialized: \"%s\"", s_device_name);
@@ -138,12 +235,12 @@ bool ble_control_hal_init(const char *device_name, ble_control_cmd_cb_t cmd_cb, 
 }
 
 void ble_control_hal_start(void) {
-    /* Flags + device name (capped so the packet stays within 31 bytes). */
+    /* Flags + device name */
     uint8_t name[32];
     size_t n = strlen(s_device_name);
     if (n > 20) n = 20;
     name[0] = (uint8_t)(n + 1);
-    name[1] = 0x09;              /* Complete Local Name */
+    name[1] = 0x09;  /* Complete Local Name */
     memcpy(&name[2], s_device_name, n);
     uint16_t name_len = (uint16_t)(n + 2);
 
@@ -152,10 +249,10 @@ void ble_control_hal_start(void) {
     memcpy(&adv[sizeof(adv_raw_prefix)], name, name_len);
     uint16_t adv_len = (uint16_t)(sizeof(adv_raw_prefix) + name_len);
 
-    /* 128-bit service UUID goes in the scan response (adv packet has no room). */
+    /* NUS UUID in scan response */
     uint8_t scan_rsp[18];
-    scan_rsp[0] = 0x11;           /* length: type + 16 bytes */
-    scan_rsp[1] = 0x07;           /* Complete List of 128-bit Service UUIDs */
+    scan_rsp[0] = 0x11;
+    scan_rsp[1] = 0x07;  /* Complete List of 128-bit Service UUIDs */
     memcpy(&scan_rsp[2], nus_svc_uuid128, sizeof(nus_svc_uuid128));
 
     esp_err_t rc = esp_ble_gap_config_adv_data_raw(adv, adv_len);
@@ -166,15 +263,14 @@ void ble_control_hal_start(void) {
     if (rc != ESP_OK) {
         ESP_LOGE(TAG, "Config scan rsp failed: %s", esp_err_to_name(rc));
     }
-    /* Advertising starts once both raw data sets report completion. */
 }
 
 void ble_control_hal_send_rsp(const char *line) {
-    send_notify(s_tx_handle, s_tx_ccc_val, line);
+    send_notify(s_handle_table[NUS_IDX_TX_VAL], s_tx_ccc_val, line);
 }
 
 void ble_control_hal_send_evt(const char *line) {
-    send_notify(s_tx_handle, s_tx_ccc_val, line);
+    send_notify(s_handle_table[NUS_IDX_TX_VAL], s_tx_ccc_val, line);
 }
 
 bool ble_control_hal_is_connected(void) {
@@ -231,32 +327,12 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         break;
     case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT:
         break;
-    case ESP_GAP_BLE_SEC_REQ_EVT:
-        esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
-        break;
-    case ESP_GAP_BLE_AUTH_CMPL_EVT:
-        ESP_LOGI(TAG, "BLE auth complete, success=%d", param->ble_security.auth_cmpl.success);
-        break;
     default:
         break;
     }
 }
 
 /* ======================== GATTS callback ======================== */
-
-static void create_control_service(void) {
-    memcpy(uuid_svc.uuid.uuid128, nus_svc_uuid128, sizeof(nus_svc_uuid128));
-    memcpy(uuid_rx.uuid.uuid128, nus_rx_uuid128, sizeof(nus_rx_uuid128));
-    memcpy(uuid_tx.uuid.uuid128, nus_tx_uuid128, sizeof(nus_tx_uuid128));
-
-    esp_gatt_srvc_id_t srvc_id = {
-        .id.uuid = uuid_svc,
-        .id.inst_id = 0,
-        .is_primary = true,
-    };
-    /* NUS has 1 service decl + 2 char decls + 2 value attrs + 1 CCCD = 6 handles. */
-    esp_ble_gatts_create_service(s_gatt_if, &srvc_id, 8);
-}
 
 static void gatts_event_handler(esp_gatts_cb_event_t event,
                                 esp_gatt_if_t gatts_if,
@@ -266,48 +342,39 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
     case ESP_GATTS_REG_EVT: {
         if (param->reg.status == ESP_GATT_OK) {
             s_gatt_if = gatts_if;
-            create_control_service();
+            /* Fill 128-bit service UUID into the table buffer */
+            memcpy(svc_uuid_buf, nus_svc_uuid128, sizeof(svc_uuid_buf));
+            esp_err_t ret = esp_ble_gatts_create_attr_tab(nus_gatt_db, gatts_if,
+                                                           NUS_IDX_NB, 0);
+            if (ret != ESP_OK) {
+                ESP_LOGE(TAG, "Create attr table failed: %s", esp_err_to_name(ret));
+            }
         }
         break;
     }
 
-    case ESP_GATTS_CREATE_EVT: {
-        s_svc_handle = param->create.service_handle;
-        ESP_LOGI(TAG, "Control service created, handle=%d", s_svc_handle);
-
-        /* RX (write) */
-        esp_ble_gatts_add_char(s_svc_handle, &uuid_rx,
-                               ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-                               ESP_GATT_CHAR_PROP_BIT_WRITE | ESP_GATT_CHAR_PROP_BIT_WRITE_NR,
-                               NULL, NULL);
-        /* TX (notify) — carries both RSP and EVT lines */
-        esp_ble_gatts_add_char(s_svc_handle, &uuid_tx,
-                               ESP_GATT_PERM_READ,
-                               ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY,
-                               NULL, NULL);
-        break;
-    }
-
-    case ESP_GATTS_ADD_CHAR_EVT: {
-        uint16_t handle = param->add_char.attr_handle;
-        const uint8_t *uuid128 = param->add_char.char_uuid.uuid.uuid128;
-        if (memcmp(uuid128, nus_rx_uuid128, sizeof(nus_rx_uuid128)) == 0) {
-            s_rx_handle = handle;
-        } else if (memcmp(uuid128, nus_tx_uuid128, sizeof(nus_tx_uuid128)) == 0) {
-            s_tx_handle = handle;
-            static uint8_t ccc_zero[] = {0x00, 0x00};
-            esp_attr_value_t ccc_val = {.attr_max_len = 2, .attr_len = 2, .attr_value = ccc_zero};
-            esp_ble_gatts_add_char_descr(s_svc_handle, &uuid_ccc,
-                                         ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE,
-                                         &ccc_val, NULL);
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
+        if (param->add_attr_tab.status != ESP_GATT_OK) {
+            ESP_LOGE(TAG, "Create attr table failed, status=%d",
+                     param->add_attr_tab.status);
+            break;
         }
-        break;
-    }
-
-    case ESP_GATTS_ADD_CHAR_DESCR_EVT: {
-        uint16_t handle = param->add_char_descr.attr_handle;
-        s_tx_ccc = handle;
-        esp_ble_gatts_start_service(s_svc_handle);
+        if (param->add_attr_tab.num_handle != NUS_IDX_NB) {
+            ESP_LOGE(TAG, "Expected %d handles, got %d",
+                     NUS_IDX_NB, param->add_attr_tab.num_handle);
+            break;
+        }
+        /* Cache all handles */
+        for (int i = 0; i < NUS_IDX_NB; i++) {
+            s_handle_table[i] = param->add_attr_tab.handles[i];
+        }
+        ESP_LOGI(TAG, "Attr table created: svc=%d rx=%d tx=%d ccc=%d",
+                 s_handle_table[NUS_IDX_SVC],
+                 s_handle_table[NUS_IDX_RX_VAL],
+                 s_handle_table[NUS_IDX_TX_VAL],
+                 s_handle_table[NUS_IDX_TX_CCC]);
+        /* Start the service */
+        esp_ble_gatts_start_service(s_handle_table[NUS_IDX_SVC]);
         break;
     }
 
@@ -344,10 +411,11 @@ static void gatts_event_handler(esp_gatts_cb_event_t event,
     case ESP_GATTS_WRITE_EVT: {
         uint16_t handle = param->write.handle;
         /* CCCD update */
-        if (!param->write.is_prep && param->write.len == 2 && handle == s_tx_ccc) {
+        if (!param->write.is_prep && handle == s_handle_table[NUS_IDX_TX_CCC]) {
             uint16_t value = param->write.value[0] | (param->write.value[1] << 8);
             s_tx_ccc_val = (value & 0x0003) ? value : 0;
-        } else if (handle == s_rx_handle) {
+            ESP_LOGI(TAG, "CCCD: notify %s", (s_tx_ccc_val & 0x0001) ? "ON" : "OFF");
+        } else if (handle == s_handle_table[NUS_IDX_RX_VAL]) {
             feed_line(param->write.value, param->write.len);
         }
         break;

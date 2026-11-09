@@ -1,0 +1,45 @@
+menu "ESP32-CAM stream example"
+
+    config CAM_STREAM_WIFI_SSID
+        string "Wi-Fi SSID"
+        default "myssid"
+        help
+            Name of the access point the ESP32-CAM connects to.
+
+    config CAM_STREAM_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default "mypassword"
+        help
+            WPA2 password of the access point. Leave empty for open networks.
+
+    choice CAM_STREAM_FRAME_SIZE
+        prompt "Frame size"
+        default CAM_STREAM_FRAME_SIZE_VGA
+        help
+            Resolution of the JPEG stream. Larger sizes need more bandwidth
+            and PSRAM.
+
+        config CAM_STREAM_FRAME_SIZE_QVGA
+            bool "QVGA (320x240)"
+        config CAM_STREAM_FRAME_SIZE_VGA
+            bool "VGA (640x480)"
+        config CAM_STREAM_FRAME_SIZE_SVGA
+            bool "SVGA (800x600)"
+        config CAM_STREAM_FRAME_SIZE_XGA
+            bool "XGA (1024x768)"
+    endchoice
+
+    config CAM_STREAM_JPEG_QUALITY
+        int "JPEG quality (0-63, lower is better)"
+        range 0 63
+        default 12
+
+    config CAM_STREAM_FB_COUNT
+        int "Number of frame buffers"
+        range 1 3
+        default 2
+        help
+            Two buffers usually give a smoother stream. Each VGA JPEG buffer
+            takes roughly 32-64 KiB in PSRAM.
+
+endmenu

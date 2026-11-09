@@ -44,6 +44,7 @@ graph TD
 ESP32/
 ├── .gitignore
 ├── README.md                                # Documentación principal del repositorio
+├── server/                                  # Servidor local de detección (YOLO) de 5_people_counter
 └── firmware/
     ├── ESP32_playground.code-workspace      # Espacio de trabajo multi-root de VS Code
     ├── README.md                            # Documentación detallada de arquitectura y capas

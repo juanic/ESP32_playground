@@ -1,0 +1,12 @@
+# Configuración para la app usb_msc_laser_bridge
+# Esta app alterna entre modo Servidor HTTP y modo MSC USB.
+# Modo default: None (sin HID). Descomentar CONFIG_HID_TRANSPORT_USB si se quiere
+# modo USB. La app usa CONFIG_TINYUSB_MSC_ENABLED para el modo MSC.
+
+CONFIG_TINYUSB_MSC_ENABLED=y
+
+<!-- Configuración opcional del servidor HTTP -->
+<!-- CONFIG_ESP_HTTPD_ENABLE=y -->
+
+<!-- Tamaño de pila para la task del servidor HTTP (archivos de corte pueden ser algunos MB) -->
+<!-- CONFIG_HTTPD_TASK_STACK_SIZE=8192 -->
