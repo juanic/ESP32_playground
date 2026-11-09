@@ -54,6 +54,12 @@ ESP32/
     │   ├── 0_test_multi/                    # Tests automáticos con pytest
     │   ├── 0_test_runner/                   # Test runner interactivo con Unity en target
     │   ├── 1_touch/                         # Aplicación de prueba de sensores touch
+    │   ├── 2_touch_sweep/                   # Barrido y calibración de umbrales touch
+    │   ├── 3_ble_media_key/                 # Teclado multimedia por Bluetooth Low Energy
+    │   ├── 4_cam_stream/                    # Streaming de video MJPEG con ESP32-CAM
+    │   ├── 5_people_counter/                # Contador de personas con ESP32-CAM + YOLO local
+    │   ├── audio_relay_sink/                # Receptor de audio I2S por Bluetooth
+    │   ├── audio_relay_source/              # Transmisor de audio por Bluetooth
     │   └── x_template/                      # Plantilla base para nuevas aplicaciones
     │
     ├── board_support/                       # BSP (LEDs, pulsadores, periféricos de placa)

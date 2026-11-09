@@ -102,6 +102,9 @@ red y el firewall tiene que permitir el puerto.
 | Pending retry | 3 | fotos pendientes reintentadas por ciclo |
 | NTP server | `pool.ntp.org` | requiere internet |
 | Timezone | `ART3` | hora local de los nombres y el CSV |
+| Work start hour | 10 | hora de inicio de capturas automáticas (inclusive) |
+| Work end hour | 17 | hora de fin de capturas automáticas (hasta las 16:59) |
+| Work days only | y | capturas automáticas solo de lunes a viernes |
 
 ---
 
@@ -126,11 +129,12 @@ y resetear (el reset por RTS del CH340 no siempre funciona; usar el botón).
 | `/` | GET | visor + controles |
 | `/api/status` | GET | IP, SD libre, sensor, hora, ajustes |
 | `/api/latest` | GET | última foto y sus detecciones |
-| `/api/capture` | POST | captura inmediata |
+| `/api/capture` | POST | captura manual inmediata (disponible siempre) |
 | `/api/settings` | POST | brillo, contraste, saturación, WB, exposición, ganancia, espejo, calidad y umbral |
 | `/api/days` | GET | días guardados y cantidad de fotos |
 | `/api/files?day=AAAA-MM-DD` | GET | archivos de un día |
-| `/files/...` | GET | descarga (`?dl=1`) |
+| `/files/...` | GET | descarga (`?dl=1`) de JPG y CSV diarios |
+| `/api/delete?day=...[&file=...]` | POST | borrado de fotos individuales o días enteros y actualización de CSV |
 
 Las cajas se dibujan en el navegador sobre la imagen original, así que la
 foto descargada queda limpia (sin recuadros grabados).
