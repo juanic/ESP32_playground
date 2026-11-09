@@ -78,4 +78,25 @@ menu "People counter example"
             POSIX TZ string, for example "ART3" for Argentina (UTC-3) or
             "CET-1CEST,M3.5.0,M10.5.0/3" for central Europe.
 
+    config PEOPLE_WORK_START_HOUR
+        int "Work window start hour (0-23)"
+        range 0 23
+        default 10
+        help
+            Hour when automatic captures start (inclusive, e.g. 10 = 10:00).
+
+    config PEOPLE_WORK_END_HOUR
+        int "Work window end hour (0-23)"
+        range 0 23
+        default 17
+        help
+            Hour when automatic captures stop (not inclusive, e.g. 17 = until 16:59:59).
+
+    config PEOPLE_WORK_DAYS_ONLY
+        bool "Capture only on weekdays (Monday to Friday)"
+        default y
+        help
+            If enabled, automatic captures will only take place Monday to
+            Friday. Manual capture from the web UI is always allowed.
+
 endmenu

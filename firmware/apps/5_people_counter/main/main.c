@@ -292,6 +292,26 @@ static void retry_pending(void) {
 	}
 }
 
+static bool is_work_time(void) {
+	if (!wifi_hal_time_synced()) {
+		return false;
+	}
+
+	time_t now = time(NULL);
+	struct tm tm;
+	localtime_r(&now, &tm);
+
+#if CONFIG_PEOPLE_WORK_DAYS_ONLY
+	/* 0 = domingo, 6 = sábado */
+	if (tm.tm_wday == 0 || tm.tm_wday == 6) {
+		return false;
+	}
+#endif
+
+	return (tm.tm_hour >= CONFIG_PEOPLE_WORK_START_HOUR &&
+			tm.tm_hour < CONFIG_PEOPLE_WORK_END_HOUR);
+}
+
 static void capture_task(void *arg) {
 	(void)arg;
 
@@ -299,10 +319,21 @@ static void capture_task(void *arg) {
 		ESP_LOGW(TAG, "Esperando sincronización de hora (SNTP)...");
 		vTaskDelay(pdMS_TO_TICKS(PEOPLE_TIME_LOG_MS));
 	}
-	ESP_LOGI(TAG, "Hora sincronizada; comienza el ciclo de capturas");
+	ESP_LOGI(TAG, "Hora sincronizada; capturas automáticas configuradas de %02d:00 a %02d:00%s",
+			 CONFIG_PEOPLE_WORK_START_HOUR, CONFIG_PEOPLE_WORK_END_HOUR,
+#if CONFIG_PEOPLE_WORK_DAYS_ONLY
+			 " (Lun a Vie)");
+#else
+			 "");
+#endif
 
-	retry_pending();
-	capture_photo();
+	if (is_work_time()) {
+		retry_pending();
+		capture_photo();
+	} else {
+		ESP_LOGI(TAG, "Fuera de horario laboral (%02d:00 a %02d:00); esperando ventana activa",
+				 CONFIG_PEOPLE_WORK_START_HOUR, CONFIG_PEOPLE_WORK_END_HOUR);
+	}
 
 	int64_t interval_ms = (int64_t)CONFIG_PEOPLE_CAPTURE_INTERVAL_S * 1000;
 	int64_t next_ms = now_ms() + interval_ms;
@@ -318,14 +349,18 @@ static void capture_task(void *arg) {
 		bool triggered = (bits & PEOPLE_CAPTURE_BIT) != 0;
 
 		if (triggered) {
-			ESP_LOGI(TAG, "Captura solicitada desde la web");
+			ESP_LOGI(TAG, "Captura manual solicitada desde la web");
 			capture_photo();
 			next_ms = now_ms() + interval_ms;
 			continue;
 		}
 
-		retry_pending();
-		capture_photo();
+		if (is_work_time()) {
+			retry_pending();
+			capture_photo();
+		} else {
+			ESP_LOGD(TAG, "Fuera de horario laboral; captura automática omitida");
+		}
 
 		next_ms += interval_ms;
 		if (next_ms <= now_ms()) {

@@ -34,3 +34,8 @@ CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
 
 # Disable brownout detector to prevent resets caused by current spikes during Wi-Fi transmission
 CONFIG_ESP_BROWNOUT_DET=n
+
+# Work schedule: 10:00 to 17:00, weekdays only
+CONFIG_PEOPLE_WORK_START_HOUR=10
+CONFIG_PEOPLE_WORK_END_HOUR=17
+CONFIG_PEOPLE_WORK_DAYS_ONLY=y
